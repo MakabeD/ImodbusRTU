@@ -1,7 +1,8 @@
 import click
 import serial
 import serial.tools.list_ports
-from pymodbus.client import ModbusSerialClient
+
+from modbus_compute import MasterModbusCompute
 
 
 @click.group()
@@ -44,9 +45,11 @@ def get_available_ports():
     "--timeout", default=1, required=False, help="TimeOut(tiempo de espera en segundos)"
 )
 def read(port, baud, timeout):
-    client = ModbusSerialClient(port=port, baudrate=baud, timeout=timeout)
+
+    client = MasterModbusCompute(port=port, baudrate=baud, timeout=timeout)
     if client.connect():
-        print("disque si")
+        res = client.read_holding_registers(1)
+        print(f"Conectado! El valor del sensor es: {res}")
 
 
 if __name__ == "__main__":
