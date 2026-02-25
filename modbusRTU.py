@@ -37,7 +37,7 @@ def get_available_ports():
 )
 @click.option(
     "--baud",
-    default=9800,
+    default=9600,
     required=False,
     help="Velocidad de transmisión (default 9600)",
 )
@@ -46,10 +46,15 @@ def get_available_ports():
 )
 def read(port, baud, timeout):
 
-    client = MasterModbusCompute(port=port, baudrate=baud, timeout=timeout)
-    if client.connect():
-        res = client.read_holding_registers(1)
-        print(f"Conectado! El valor del sensor es: {res}")
+    with MasterModbusCompute(port=port, baudrate=baud, timeout=timeout) as client:
+        if client.serial:
+            try:
+                res = client.read_holding_registers(1, count=1)
+                print(f"Conectado! El valor del sensor es: {res}")
+            finally:
+                client.disconnect()
+        else:
+            print("No se pudo leer correctamente, error al conectar")
 
 
 if __name__ == "__main__":

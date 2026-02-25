@@ -26,6 +26,21 @@ def registers_compute(registers: bytes, count: int):
     return decimal_registers
 
 
+def validate_response_crc(response: bytes) -> bool:
+    """Valida que la trama recibida no esté corrupta usando el CRC."""
+    #  5 bytes (ID, Func, Count, CRC_L, CRC_H)
+    if len(response) < 5:
+        return False
+
+    menssage_no_crc = response[:-2]
+
+    crc_received = response[-2:]
+
+    crc_computed = compute_crc(menssage_no_crc)
+
+    return crc_received == crc_computed
+
+
 READ_HOLDING_RGISTER = 3
 
 
@@ -46,42 +61,63 @@ class MasterModbusCompute:
         self.bytesize = bytesize
         self.timeout = timeout
 
-    def connect(self):
-        self.ser = serial.Serial(
-            port=self.port,
-            baudrate=self.baudrate,
-            parity=self.parity,
-            stopbits=self.stopbits,
-            bytesize=self.bytesize,
-            timeout=self.timeout,
-        )
+    def __enter__(self):
+        self.connect()
+        return self
 
-        if self.ser.is_open:
-            print("Puerto conectado.")
-            self.serial = self.ser
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.serial and self.serial.is_open:
+            self.serial.close()
+            print(f"Puerto {self.port} cerrado y liberado de forma segura.")
+
+    def connect(self) -> bool:
+        try:
+            # Intentamos abrir el puerto
+            self.serial = serial.Serial(
+                port=self.port,
+                baudrate=self.baudrate,
+                parity=self.parity,
+                stopbits=self.stopbits,
+                bytesize=self.bytesize,
+                timeout=self.timeout,
+            )
+            print(f"Puerto {self.port} conectado exitosamente.")
             return True
-        else:
-            print(f"No hubo respuesta del sensor. Puerto: {self.port}")
-            self.serial = self.ser
+
+        except serial.SerialException as e:
+            # Si explota (puerto no existe, o está ocupado), caemos aquí
+            print(f"Error critico: No se pudo abrir el puerto {self.port}.")
+            print(f"Detalle tecnico: {e}")
+            self.serial = None
             return False
 
     def read_holding_registers(self, slave_id: int, address: int = 0, count: int = 1):
-        self.slave_id = slave_id
-        self.function_code = READ_HOLDING_RGISTER
-        self.address = address
-        self.count = count
-        self.plot = self.plot_base(
-            self.slave_id, self.function_code, self.address, self.count
-        )
-        self.final_plot = self.plot + compute_crc(self.plot)
-        self.ser.write(self.final_plot)
+        if self.serial is None:
+            return
+        function_code = READ_HOLDING_RGISTER
+        address = address
+        count = count
+        plot = self.plot_base(slave_id, function_code, address, count)
+        final_plot = plot + compute_crc(plot)
+        self.serial.write(final_plot)
         time.sleep(self.timeout)
-        holding_registers = self.serial.read(5 + 2 * self.count)
+        holding_registers = self.serial.read(5 + 2 * count)
         if holding_registers:
-            return registers_compute(holding_registers, self.count)
+            if validate_response_crc(holding_registers):
+                return registers_compute(holding_registers, count)
+            else:
+                print("Error de CRC: Hay ruido en el cable o la trama llegó corrupta")
+                return []
         else:
             print("No hubo respuesta del sensor")
             return []
+
+    def disconnect(self):
+        if self.serial is None:
+            raise
+        if hasattr(self, "Serial") and self.serial.is_open:
+            self.serial.close()
+            print("Puerto cerrado correctamente.")
 
     def plot_base(self, slave: int, function_code: int, address: int, count: int):
         plot_base = bytearray([slave, function_code])
