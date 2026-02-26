@@ -2,7 +2,7 @@ import click
 import serial
 import serial.tools.list_ports
 
-from modbus_compute import MasterModbusCompute
+from compute.modbus_compute import MasterModbusCompute
 
 
 @click.group()
