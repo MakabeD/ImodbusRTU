@@ -26,6 +26,24 @@ def registers_compute(registers: bytes, count: int):
     return decimal_registers
 
 
+def error_bit_validation(registers):
+    # El byte en la posicion 1 es el codigo de funcion (ej. 0x03 o 0x83)
+    funcion_recibida = registers[1]
+
+    # Verificamos si tiene el bit de error encendido (0x80 = 128 decimal)
+    if funcion_recibida >= 0x80:
+        codigo_error = registers[2]
+        errores = {
+            1: "01 Función Ilegal (Comando no soportado)",
+            2: "02 Dirección Ilegal (El registro no existe o pediste demasiados)",
+            3: "03 Valor de Datos Ilegal",
+            4: "04 Fallo interno del dispositivo",
+        }
+        mensaje = errores.get(codigo_error, f"Error desconocido: {codigo_error}")
+        print(f"Excepción Modbus detectada: {mensaje}")
+        return []  # Retornamos vacio porque no hay datos que procesar
+
+
 def validate_response_crc(response: bytes) -> bool:
     """Valida que la trama recibida no esté corrupta usando el CRC."""
     #  5 bytes (ID, Func, Count, CRC_L, CRC_H)
@@ -104,6 +122,7 @@ class MasterModbusCompute:
         holding_registers = self.serial.read(5 + 2 * count)
         if holding_registers:
             if validate_response_crc(holding_registers):
+                error_bit_validation(holding_registers)
                 return registers_compute(holding_registers, count)
             else:
                 print("Error de CRC: Hay ruido en el cable o la trama llegó corrupta")
