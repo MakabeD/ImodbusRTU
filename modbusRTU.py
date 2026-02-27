@@ -2,7 +2,7 @@ import click
 import serial
 import serial.tools.list_ports
 
-from modbus_compute import MasterModbusCompute
+from compute.modbus_compute import MasterModbusCompute
 
 
 @click.group()
@@ -49,8 +49,8 @@ def read(port, baud, timeout):
     with MasterModbusCompute(port=port, baudrate=baud, timeout=timeout) as client:
         if client.serial:
             try:
-                res = client.read_holding_registers(1, count=1)
-                print(f"Conectado! El valor del sensor es: {res}")
+                res = client.read_holding_registers(1)
+                print(f"El valor del sensor es: {res}")
             finally:
                 client.disconnect()
         else:
