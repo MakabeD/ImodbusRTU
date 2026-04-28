@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import time
+from dataclasses import dataclass
 
 import serial
 
@@ -13,11 +16,29 @@ if not hasattr(serial, "PARITY_NONE"):
     )
 
 
-def compute_crc(data):
+READ_HOLDING_REGISTER = 3
+
+
+@dataclass(frozen=True)
+class RegisterValue:
+    slave_id: int
+    address: int
+    value: int
+
+
+@dataclass(frozen=True)
+class VariableCandidate:
+    slave_id: int
+    address: int
+    first_value: int
+    second_value: int
+
+
+def compute_crc(data: bytes) -> bytes:
     crc = 0xFFFF
     for pos in data:
         crc ^= pos
-        for i in range(8):
+        for _ in range(8):
             if (crc & 1) != 0:
                 crc >>= 1
                 crc ^= 0xA001
@@ -27,49 +48,68 @@ def compute_crc(data):
     return crc.to_bytes(2, "little")
 
 
-def registers_compute(registers: bytes, count: int):
+def registers_compute(registers: bytes, count: int) -> list[int]:
+    if count <= 0:
+        return []
+
     decimal_registers = [
-        int.from_bytes(registers[1 + 2 * i : 3 + 2 * i], byteorder="big")
-        for i in range(1, count + 1)
-        if count != 0
+        int.from_bytes(registers[3 + 2 * i : 5 + 2 * i], byteorder="big")
+        for i in range(count)
     ]
     return decimal_registers
 
 
-def error_bit_validation(registers):
-    # El byte en la posicion 1 es el codigo de funcion (ej. 0x03 o 0x83)
+def error_bit_validation(registers: bytes) -> list[int] | None:
     funcion_recibida = registers[1]
 
-    # Verificamos si tiene el bit de error encendido (0x80 = 128 decimal)
     if funcion_recibida >= 0x80:
         codigo_error = registers[2]
         errores = {
-            1: "01 Función Ilegal (Comando no soportado)",
-            2: "02 Dirección Ilegal (El registro no existe o pediste demasiados)",
-            3: "03 Valor de Datos Ilegal",
+            1: "01 Funcion ilegal (Comando no soportado)",
+            2: "02 Direccion ilegal (El registro no existe o pediste demasiados)",
+            3: "03 Valor de datos ilegal",
             4: "04 Fallo interno del dispositivo",
         }
         mensaje = errores.get(codigo_error, f"Error desconocido: {codigo_error}")
-        print(f"Excepción Modbus detectada: {mensaje}")
-        return []  # Retornamos vacio porque no hay datos que procesar
+        print(f"Excepcion Modbus detectada: {mensaje}")
+        return []
+
+    return None
 
 
 def validate_response_crc(response: bytes) -> bool:
-    """Valida que la trama recibida no esté corrupta usando el CRC."""
-    #  5 bytes (ID, Func, Count, CRC_L, CRC_H)
     if len(response) < 5:
         return False
 
-    menssage_no_crc = response[:-2]
-
+    message_no_crc = response[:-2]
     crc_received = response[-2:]
-
-    crc_computed = compute_crc(menssage_no_crc)
+    crc_computed = compute_crc(message_no_crc)
 
     return crc_received == crc_computed
 
 
-READ_HOLDING_RGISTER = 3
+def find_variable_candidates(
+    first_snapshot: list[RegisterValue],
+    second_snapshot: list[RegisterValue],
+) -> list[VariableCandidate]:
+    first_map = {(item.slave_id, item.address): item.value for item in first_snapshot}
+    second_map = {(item.slave_id, item.address): item.value for item in second_snapshot}
+
+    candidates: list[VariableCandidate] = []
+    for key in sorted(first_map.keys() & second_map.keys()):
+        first_value = first_map[key]
+        second_value = second_map[key]
+        if first_value != second_value:
+            candidates.append(
+                VariableCandidate(
+                    slave_id=key[0],
+                    address=key[1],
+                    first_value=first_value,
+                    second_value=second_value,
+                )
+            )
+
+    return candidates
 
 
 class MasterModbusCompute:
@@ -80,7 +120,7 @@ class MasterModbusCompute:
         parity: str = serial.PARITY_NONE,
         stopbits: float = serial.STOPBITS_ONE,
         bytesize: int = serial.EIGHTBITS,
-        timeout: int = 1,
+        timeout: float = 1,
     ):
         self.port = port
         self.baudrate = baudrate
@@ -88,19 +128,20 @@ class MasterModbusCompute:
         self.stopbits = stopbits
         self.bytesize = bytesize
         self.timeout = timeout
+        self.serial: serial.Serial | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> "MasterModbusCompute":
         self.connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.serial and self.serial.is_open:
-            self.serial.close()
-            print(f"Puerto {self.port} cerrado y liberado de forma segura.")
+        self.disconnect()
 
     def connect(self) -> bool:
+        if self.serial and self.serial.is_open:
+            return True
+
         try:
-            # Intentamos abrir el puerto
             self.serial = serial.Serial(
                 port=self.port,
                 baudrate=self.baudrate,
@@ -111,46 +152,108 @@ class MasterModbusCompute:
             )
             print(f"Puerto {self.port} conectado exitosamente.")
             return True
-
-        except serial.SerialException as e:
-            # Si explota (puerto no existe, o está ocupado), caemos aquí
+        except serial.SerialException as error:
             print(f"Error critico: No se pudo abrir el puerto {self.port}.")
-            print(f"Detalle tecnico: {e}")
+            print(f"Detalle tecnico: {error}")
             self.serial = None
             return False
 
+    def disconnect(self):
+        if self.serial and self.serial.is_open:
+            self.serial.close()
+            print(f"Puerto {self.port} cerrado y liberado de forma segura.")
+
     def read_holding_registers(self, slave_id: int, address: int = 0, count: int = 1):
-        if self.serial is None:
-            return
-        function_code = READ_HOLDING_RGISTER
-        address = address
-        count = count
-        plot = self.plot_base(slave_id, function_code, address, count)
-        final_plot = plot + compute_crc(plot)
-        self.serial.write(final_plot)
-        time.sleep(self.timeout)
-        holding_registers = self.serial.read(5 + 2 * count)
-        if holding_registers:
-            if validate_response_crc(holding_registers):
-                error_bit_validation(holding_registers)
-                return registers_compute(holding_registers, count)
-            else:
-                print("Error de CRC: Hay ruido en el cable o la trama llegó corrupta")
-                return []
-        else:
-            print("No hubo respuesta del sensor")
+        if self.serial is None or not self.serial.is_open:
             return []
 
-    def disconnect(self):
-        if self.serial is None:
-            raise
-        if hasattr(self, "Serial") and self.serial.is_open:
-            self.serial.close()
-            print("Puerto cerrado correctamente.")
+        request = self.plot_base(slave_id, READ_HOLDING_REGISTER, address, count)
+        frame = request + compute_crc(request)
+        expected_length = 5 + 2 * count
 
-    def plot_base(self, slave: int, function_code: int, address: int, count: int):
+        try:
+            self.serial.reset_input_buffer()
+            self.serial.reset_output_buffer()
+            self.serial.write(frame)
+            time.sleep(self.timeout)
+            holding_registers = self.serial.read(expected_length)
+        except serial.SerialException as error:
+            print(f"Fallo de comunicacion con el esclavo {slave_id}: {error}")
+            return []
+
+        if not holding_registers:
+            return []
+
+        if not validate_response_crc(holding_registers):
+            print(
+                f"Error de CRC al leer esclavo {slave_id}, direccion {address}. "
+                "La trama pudo llegar corrupta."
+            )
+            return []
+
+        error_response = error_bit_validation(holding_registers)
+        if error_response == []:
+            return []
+
+        return registers_compute(holding_registers, count)
+
+    def probe_slave(self, slave_id: int, probe_address: int = 0, count: int = 1) -> bool:
+        return bool(
+            self.read_holding_registers(
+                slave_id=slave_id,
+                address=probe_address,
+                count=count,
+            )
+        )
+
+    def scan_slave_addresses(
+        self,
+        slave_start: int = 1,
+        slave_end: int = 247,
+        probe_address: int = 0,
+        count: int = 1,
+        delay: float = 0.05,
+    ) -> list[int]:
+        found_slaves: list[int] = []
+        for slave_id in range(slave_start, slave_end + 1):
+            if self.probe_slave(slave_id, probe_address=probe_address, count=count):
+                found_slaves.append(slave_id)
+            if delay > 0:
+                time.sleep(delay)
+
+        return found_slaves
+
+    def scan_registers(
+        self,
+        slave_id: int,
+        register_start: int,
+        register_end: int,
+        count: int = 1,
+        delay: float = 0.02,
+    ) -> list[RegisterValue]:
+        found_registers: list[RegisterValue] = []
+        for address in range(register_start, register_end + 1):
+            values = self.read_holding_registers(
+                slave_id=slave_id,
+                address=address,
+                count=count,
+            )
+            if values:
+                found_registers.append(
+                    RegisterValue(
+                        slave_id=slave_id,
+                        address=address,
+                        value=values[0],
+                    )
+                )
+            if delay > 0:
+                time.sleep(delay)
+
+        return found_registers
+
+    @staticmethod
+    def plot_base(slave: int, function_code: int, address: int, count: int) -> bytearray:
         plot_base = bytearray([slave, function_code])
         plot_base.extend(address.to_bytes(2, "big"))
         plot_base.extend(count.to_bytes(2, "big"))
-
         return plot_base
