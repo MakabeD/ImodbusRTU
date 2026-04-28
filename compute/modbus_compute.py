@@ -3,6 +3,16 @@ import time
 import serial
 
 
+if not hasattr(serial, "PARITY_NONE"):
+    serial_module = getattr(serial, "__file__", "desconocido")
+    raise ImportError(
+        "Se importo un paquete incorrecto llamado 'serial' en lugar de 'pyserial'. "
+        f"Modulo cargado: {serial_module}. "
+        "Solucion: ejecuta '.\\.venv\\Scripts\\python.exe -m pip uninstall -y serial' "
+        "y luego '.\\.venv\\Scripts\\python.exe -m pip install --force-reinstall pyserial==3.5'."
+    )
+
+
 def compute_crc(data):
     crc = 0xFFFF
     for pos in data:

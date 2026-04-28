@@ -2,6 +2,16 @@ import click
 import serial
 import serial.tools.list_ports
 
+
+if not hasattr(serial, "tools"):
+    serial_module = getattr(serial, "__file__", "desconocido")
+    raise ImportError(
+        "Se importo un paquete incorrecto llamado 'serial' en lugar de 'pyserial'. "
+        f"Modulo cargado: {serial_module}. "
+        "Solucion: ejecuta '.\\.venv\\Scripts\\python.exe -m pip uninstall -y serial' "
+        "y luego '.\\.venv\\Scripts\\python.exe -m pip install --force-reinstall pyserial==3.5'."
+    )
+
 from compute.modbus_compute import MasterModbusCompute
 
 
