@@ -1,16 +1,7 @@
 import click
+import pandas as pd
 import serial
 import serial.tools.list_ports
-
-
-if not hasattr(serial, "tools"):
-    serial_module = getattr(serial, "__file__", "desconocido")
-    raise ImportError(
-        "Se importo un paquete incorrecto llamado 'serial' en lugar de 'pyserial'. "
-        f"Modulo cargado: {serial_module}. "
-        "Solucion: ejecuta '.\\.venv\\Scripts\\python.exe -m pip uninstall -y serial' "
-        "y luego '.\\.venv\\Scripts\\python.exe -m pip install --force-reinstall pyserial==3.5'."
-    )
 
 from compute.modbus_compute import MasterModbusCompute
 
@@ -57,14 +48,63 @@ def get_available_ports():
 def read(port, baud, timeout):
 
     with MasterModbusCompute(port=port, baudrate=baud, timeout=timeout) as client:
+        tabla = pd.DataFrame({"Nombre": ["Ana", "Luis", "María"]})
+        registro1 = []
+        registro2 = []
         if client.serial:
-            try:
-                res = client.read_holding_registers(1)
-                print(f"El valor del sensor es: {res}")
-            finally:
-                client.disconnect()
+            n = 68
+            for i in range(n):
+                try:
+                    res = client.read_holding_registers(1, address=i)
+                    print(f"El valor del sensor es: {res}")
+                    if res[0] != 49393:
+                        registro1.append(structure(res[0], i))
+                finally:
+                    client.disconnect()
+            input("==================ESPERA==================")  ####espera
+
+            for i in range(n):
+                try:
+                    res = client.read_holding_registers(1, address=i)
+                    print(f"El valor del sensor es: {res}")
+                    if res[0] != 49393:
+                        registro2.append(structure(res[0], i))
+                finally:
+                    client.disconnect()
+
+            x = compare_structured_list(regi1=registro1, regi2=registro2)
+            print_everytwo(x)
         else:
             print("No se pudo leer correctamente, error al conectar")
+
+
+def print_everytwo(x):
+    for i in range(len(x)):
+        if i % 2 == 0:
+            print("\n")
+        print(x[i])
+
+
+def compare_structured_list(regi1: structure, regi2: structure):
+    true = []
+    if len(regi1) != len(regi2):
+        print("los registros tienen diferente longitud")
+        return
+    else:
+        for i in range(len(regi1)):
+            if regi1[i].val != regi2[i].val and regi1[i].index == regi2[i].index:
+                true.append(regi1[i])
+                true.append(regi2[i])
+    return true
+
+
+class structure:
+    def __str__(self):
+        return "valor: {:>8}. Direccion: {:>8}".format(self.val, self.index)
+
+    def __init__(self, val: float, index: int):
+        self.val = val
+        self.index = index
 
 
 if __name__ == "__main__":
