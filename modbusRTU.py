@@ -2,10 +2,12 @@ import click
 import serial
 import serial.tools.list_ports
 
-from compute.modbus_compute import MasterModbusCompute
-from compute.modbus_compute import RegisterValue
-from compute.modbus_compute import VariableCandidate
-from compute.modbus_compute import find_variable_candidates
+from compute.modbus_compute import (
+    MasterModbusCompute,
+    RegisterValue,
+    VariableCandidate,
+    find_variable_candidates,
+)
 
 
 @click.group()
@@ -87,13 +89,13 @@ def analyze_registers(
 )
 @click.option(
     "--slave-end",
-    default=10,
+    default=1,
     show_default=True,
     help="Direccion final de esclavo a probar.",
 )
 @click.option(
     "--probe-address",
-    default=0,
+    default=30,
     show_default=True,
     help="Registro usado para probar si el esclavo responde.",
 )
@@ -152,7 +154,9 @@ def analyze(
             click.echo("No se encontraron esclavos Modbus que respondan en ese rango.")
             return
 
-        click.echo(f"Direcciones activas detectadas: {', '.join(map(str, found_slaves))}")
+        click.echo(
+            f"Direcciones activas detectadas: {', '.join(map(str, found_slaves))}"
+        )
         click.echo("")
         first_snapshot = analyze_registers(
             client=client,
