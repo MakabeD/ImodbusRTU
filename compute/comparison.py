@@ -4,7 +4,18 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+
+# Optional plotting dependencies
+import numpy as np
 import pandas as pd
+
+try:
+    import seaborn as sns  # type: ignore
+
+    SEABORN_AVAILABLE = True
+except Exception:
+    SEABORN_AVAILABLE = False
 
 from compute.monitoring import load_run_dataframe
 
@@ -17,6 +28,8 @@ class ComparisonDashboard:
     delta_df: pd.DataFrame
     html: str
     output_path: Path | None
+    # Optional path mappings for generated plots (name -> file path)
+    plots: dict[str, str] | None = None
 
 
 def _register_columns(dataframe: pd.DataFrame) -> list[str]:
@@ -34,7 +47,9 @@ def _validate_comparable_tables(left_df: pd.DataFrame, right_df: pd.DataFrame):
         raise ValueError("Las tablas no tienen la misma cantidad de filas.")
 
 
-def build_delta_dataframe(left_df: pd.DataFrame, right_df: pd.DataFrame) -> pd.DataFrame:
+def build_delta_dataframe(
+    left_df: pd.DataFrame, right_df: pd.DataFrame
+) -> pd.DataFrame:
     _validate_comparable_tables(left_df, right_df)
 
     registers = _register_columns(left_df)
@@ -45,7 +60,9 @@ def build_delta_dataframe(left_df: pd.DataFrame, right_df: pd.DataFrame) -> pd.D
     return delta_df
 
 
-def build_summary_dataframe(left_df: pd.DataFrame, right_df: pd.DataFrame) -> pd.DataFrame:
+def build_summary_dataframe(
+    left_df: pd.DataFrame, right_df: pd.DataFrame
+) -> pd.DataFrame:
     _validate_comparable_tables(left_df, right_df)
 
     rows: list[dict[str, object]] = []
@@ -135,22 +152,137 @@ def render_dashboard_html(
 """.strip()
 
 
+def _build_plot_bar_chart(summary_df: pd.DataFrame) -> plt.Figure:
+    """Create a grouped bar chart of left_mean vs right_mean per register.
+
+    Returns a matplotlib Figure object.
+    """
+    registers = summary_df["register"].tolist()
+    left_means = summary_df["left_mean"].tolist()
+    right_means = summary_df["right_mean"].tolist()
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    x = np.arange(len(registers))
+    width = max(0.25, min(0.35, 0.8 / max(1, len(registers))))
+
+    ax.bar(x - width / 2, left_means, width=width, label="Left mean")
+    ax.bar(x + width / 2, right_means, width=width, label="Right mean")
+    ax.set_xticks(x)
+    ax.set_xticklabels(registers, rotation=45, ha="right")
+    ax.set_ylabel("Mean Value")
+    ax.legend()
+    ax.grid(True, linestyle="--", alpha=0.3)
+    plt.tight_layout()
+    return fig
+
+
+def _build_plot_heatmap(delta_df: pd.DataFrame, registers: list[str]) -> plt.Figure:
+    """Create a heatmap of delta values per sample (rows) and register (columns).
+
+    This function returns a Figure object.
+    """
+    heatmap_df = delta_df[registers].copy()
+    if heatmap_df.shape[0] > 200:
+        # Downsample for readability
+        idx = np.linspace(0, heatmap_df.shape[0] - 1, 200, dtype=int)
+        heatmap_df = heatmap_df.iloc[idx]
+    # Use sample_index as y-axis labels when available
+    if "sample_index" in delta_df.columns:
+        heatmap_df.index = (
+            delta_df["sample_index"].astype(str).iloc[: heatmap_df.shape[0]]
+        )
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    if SEABORN_AVAILABLE:
+        sns.heatmap(heatmap_df.T, ax=ax, cmap="coolwarm", center=0)
+        ax.set_xlabel("Sample index subset")
+        ax.set_ylabel("Register")
+        ax.invert_yaxis()
+    else:
+        im = ax.imshow(heatmap_df.T.values, aspect="auto", cmap="coolwarm")
+        ax.set_xticks(range(heatmap_df.shape[0]))
+        ax.set_yticks(range(len(registers)))
+        ax.set_yticklabels(registers)
+        fig.colorbar(im, ax=ax)
+        ax.set_ylabel("Register")
+        ax.set_xlabel("Sample index subset")
+    plt.tight_layout()
+    return fig
+
+
+def render_dashboard_plots(
+    left_table: str,
+    right_table: str,
+    summary_df: pd.DataFrame,
+    delta_df: pd.DataFrame,
+    output_path: str | Path | None = None,
+) -> dict[str, str] | None:
+    """Render a matplotlib/seaborn based dashboard and optionally save to file.
+
+    Returns a dict mapping plot name to the saved file path, or None if not rendered.
+    """
+    if summary_df.empty or delta_df.empty:
+        return None
+
+    registers = summary_df["register"].tolist()
+
+    # Build plots
+    bar_fig = _build_plot_bar_chart(summary_df)
+    heatmap_fig = _build_plot_heatmap(delta_df, registers)
+
+    plots: dict[str, str] = {}
+    if output_path is not None:
+        out_p = Path(output_path)
+        # If a file path was supplied, use it directly; otherwise create a default filename
+        if out_p.suffix == "":
+            out_p = out_p / "dashboard_plots.png"
+
+        # Save the figures to separate files to avoid large in-memory PNGs
+        bar_path = out_p.parent / (out_p.stem + "_bar.png")
+        heat_path = out_p.parent / (out_p.stem + "_heatmap.png")
+        bar_fig.savefig(bar_path, dpi=300, bbox_inches="tight")
+        heatmap_fig.savefig(heat_path, dpi=300, bbox_inches="tight")
+        plt.close(bar_fig)
+        plt.close(heatmap_fig)
+        plots["bar"] = str(bar_path)
+        plots["heatmap"] = str(heat_path)
+        return plots
+    else:
+        # If not saving, just close and return None (caller may display inline)
+        plt.close(bar_fig)
+        plt.close(heatmap_fig)
+        return None
+
+
 def compare_dataframes(
     left_df: pd.DataFrame,
     right_df: pd.DataFrame,
     left_table: str = "left",
     right_table: str = "right",
     output_path: str | Path | None = None,
+    render_html: bool = False,
 ) -> ComparisonDashboard:
     summary_df = build_summary_dataframe(left_df, right_df)
     delta_df = build_delta_dataframe(left_df, right_df)
     html = render_dashboard_html(left_table, right_table, summary_df, delta_df)
-
     resolved_output_path: Path | None = None
     if output_path is not None:
         resolved_output_path = Path(output_path)
         resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
-        resolved_output_path.write_text(html, encoding="utf-8")
+        resolved_output_path.write_text(
+            html, encoding="utf-8"
+        ) if render_html else print("render html seted false")
+
+    # Generate plots if an output path is provided
+    plots: dict[str, str] | None = None
+    if output_path is not None:
+        plots = render_dashboard_plots(
+            left_table=left_table,
+            right_table=right_table,
+            summary_df=summary_df,
+            delta_df=delta_df,
+            output_path=output_path,
+        )
 
     return ComparisonDashboard(
         left_table=left_table,
@@ -159,6 +291,7 @@ def compare_dataframes(
         delta_df=delta_df,
         html=html,
         output_path=resolved_output_path,
+        plots=plots,
     )
 
 
