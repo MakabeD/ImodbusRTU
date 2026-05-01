@@ -256,6 +256,7 @@ def _build_change_overview_plot(summary_df: pd.DataFrame):
 
 def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df: pd.DataFrame):
     import matplotlib.pyplot as plt
+    import pandas as pd
 
     trend_registers = summary_df.head(4)["register"].tolist()
     sample_axis = (
@@ -285,6 +286,10 @@ def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df:
     for axis, register in zip(axes, trend_registers):
         left_series = pd.to_numeric(left_df[register], errors="coerce")
         right_series = pd.to_numeric(right_df[register], errors="coerce")
+
+        left_mean = left_series.mean()
+        right_mean = right_series.mean()
+
         axis.plot(
             sample_axis,
             left_series,
@@ -303,6 +308,24 @@ def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df:
             markersize=3,
             label="Right run",
         )
+        
+        axis.axhline(
+            left_mean, 
+            color="#0f766e", 
+            linestyle="--", 
+            linewidth=1.5, 
+            alpha=0.6, 
+            label="Avg Left"
+        )
+        axis.axhline(
+            right_mean, 
+            color="#ca8a04", 
+            linestyle="--", 
+            linewidth=1.5, 
+            alpha=0.6, 
+            label="Avg Right"
+        )
+
         axis.fill_between(
             sample_axis,
             left_series,
@@ -313,7 +336,8 @@ def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df:
         axis.set_title(register.replace("register_", "Register "), loc="left", fontsize=11)
         axis.grid(True, linestyle="--", alpha=0.24)
         axis.set_facecolor("#ffffff")
-        axis.legend(loc="upper right")
+        
+        axis.legend(loc="upper right", ncol=2) 
 
     axes[-1].set_xlabel("Sample index")
     fig.tight_layout()
