@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 import serial
 
-
 if not hasattr(serial, "PARITY_NONE"):
     serial_module = getattr(serial, "__file__", "desconocido")
     raise ImportError(
@@ -59,7 +58,7 @@ def registers_compute(registers: bytes, count: int) -> list[int]:
     return decimal_registers
 
 
-def error_bit_validation(registers: bytes) -> list[int] | None:
+def error_bit_validation(registers: bytes, quiet: bool = False) -> list[int] | None:
     funcion_recibida = registers[1]
 
     if funcion_recibida >= 0x80:
@@ -71,7 +70,7 @@ def error_bit_validation(registers: bytes) -> list[int] | None:
             4: "04 Fallo interno del dispositivo",
         }
         mensaje = errores.get(codigo_error, f"Error desconocido: {codigo_error}")
-        print(f"Excepcion Modbus detectada: {mensaje}")
+        print(f"\n Excepcion Modbus detectada: {mensaje}") if not quiet else None
         return []
 
     return None
@@ -163,7 +162,9 @@ class MasterModbusCompute:
             self.serial.close()
             print(f"Puerto {self.port} cerrado y liberado de forma segura.")
 
-    def read_holding_registers(self, slave_id: int, address: int = 0, count: int = 1):
+    def read_holding_registers(
+        self, slave_id: int, address: int = 0, count: int = 1, quiet: bool = False
+    ):
         if self.serial is None or not self.serial.is_open:
             return []
 
@@ -191,13 +192,15 @@ class MasterModbusCompute:
             )
             return []
 
-        error_response = error_bit_validation(holding_registers)
+        error_response = error_bit_validation(holding_registers, quiet)
         if error_response == []:
             return []
 
         return registers_compute(holding_registers, count)
 
-    def probe_slave(self, slave_id: int, probe_address: int = 0, count: int = 1) -> bool:
+    def probe_slave(
+        self, slave_id: int, probe_address: int = 0, count: int = 1
+    ) -> bool:
         return bool(
             self.read_holding_registers(
                 slave_id=slave_id,
@@ -252,7 +255,9 @@ class MasterModbusCompute:
         return found_registers
 
     @staticmethod
-    def plot_base(slave: int, function_code: int, address: int, count: int) -> bytearray:
+    def plot_base(
+        slave: int, function_code: int, address: int, count: int
+    ) -> bytearray:
         plot_base = bytearray([slave, function_code])
         plot_base.extend(address.to_bytes(2, "big"))
         plot_base.extend(count.to_bytes(2, "big"))

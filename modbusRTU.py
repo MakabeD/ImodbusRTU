@@ -1,19 +1,18 @@
-import sys
 import logging
+import sys
 
 import click
 import serial
 import serial.tools.list_ports
 
-from compute.comparison import compare_sqlite_tables
-from compute.comparison import list_monitoring_tables
-from compute.monitoring import monitor_with_client
+from compute.comparison import compare_sqlite_tables, list_monitoring_tables
 from compute.modbus_compute import (
     MasterModbusCompute,
     RegisterValue,
     VariableCandidate,
     find_variable_candidates,
 )
+from compute.monitoring import monitor_with_client
 
 
 def setup_logging(verbose: bool, quiet: bool):
@@ -87,7 +86,7 @@ def render_progress_bar(current: int, total: int, prefix: str = "", width: int =
     percent = current / total if total > 0 else 0
     filled = int(width * percent)
     bar = "█" * filled + "░" * (width - filled)
-    click.echo(f"\r{prefix}[{bar}] {current}/{total} ({percent*100:.0f}%)", nl=False)
+    click.echo(f"\r{prefix}[{bar}] {current}/{total} ({percent * 100:.0f}%)", nl=False)
     if current >= total:
         click.echo()
 
@@ -123,13 +122,13 @@ def analyze_registers(
 
     for slave_id in slave_ids:
         if show_progress:
-            click.echo(f"\n[Esclavo {slave_id}] Escaneando registros {register_start}-{register_end}...")
+            click.echo(
+                f"\n[Esclavo {slave_id}] Escaneando registros {register_start}-{register_end}..."
+            )
 
         for address in range(register_start, register_end + 1):
             values = client.read_holding_registers(
-                slave_id=slave_id,
-                address=address,
-                count=1,
+                slave_id=slave_id, address=address, count=1, quiet=show_progress
             )
             if values:
                 snapshot.append(
@@ -144,13 +143,7 @@ def analyze_registers(
                 render_progress_bar(current, total_registers, prefix="Progreso: ")
 
         # Always render registers for each slave
-        render_registers(
-            [
-                r
-                for r in snapshot
-                if r.slave_id == slave_id
-            ]
-        )
+        render_registers([r for r in snapshot if r.slave_id == slave_id])
 
     if show_progress:
         click.echo(f"\nTotal de registros leidos: {len(snapshot)}")
@@ -421,7 +414,9 @@ EXPLORE_COMMANDS = {
 @click.option("--port", required=True, help="Nombre del puerto, por ejemplo COM3.")
 @click.option("--baud", default=9600, show_default=True, help="Baudios.")
 @click.option("--timeout", default=0.2, show_default=True, help="Timeout en segundos.")
-@click.option("--slave", default=1, show_default=True, type=int, help="Direccion del esclavo.")
+@click.option(
+    "--slave", default=1, show_default=True, type=int, help="Direccion del esclavo."
+)
 def explore(port, baud, timeout, slave):
     """Modo interactivo para explorar registros Modbus."""
     click.echo("=== Modo Explorador Modbus RTU ===")
@@ -477,7 +472,9 @@ def explore(port, baud, timeout, slave):
                     for addr in addresses:
                         values = client.read_holding_registers(slave, addr, 1)
                         if values:
-                            reg = RegisterValue(slave_id=slave, address=addr, value=values[0])
+                            reg = RegisterValue(
+                                slave_id=slave, address=addr, value=values[0]
+                            )
                             current_snapshot.append(reg)
                             click.echo(f"  [{addr}] = {values[0]}")
                         else:
@@ -497,7 +494,9 @@ def explore(port, baud, timeout, slave):
 
                 elif action == "slaves":
                     click.echo("Buscando esclavos...")
-                    found = client.scan_slave_addresses(slave_start=1, slave_end=247, probe_address=0)
+                    found = client.scan_slave_addresses(
+                        slave_start=1, slave_end=247, probe_address=0
+                    )
                     if found:
                         click.echo(f"Esclavos activos: {', '.join(map(str, found))}")
                     else:
@@ -505,9 +504,13 @@ def explore(port, baud, timeout, slave):
 
                 elif action == "dump":
                     if not current_snapshot:
-                        click.echo("No hay datos guardados. Usa 'read' o 'scan' primero.")
+                        click.echo(
+                            "No hay datos guardados. Usa 'read' o 'scan' primero."
+                        )
                     else:
-                        click.echo(f"\nSnapshot actual ({len(current_snapshot)} registros):")
+                        click.echo(
+                            f"\nSnapshot actual ({len(current_snapshot)} registros):"
+                        )
                         for reg in current_snapshot:
                             click.echo(f"  [{reg.address:>4}] = {reg.value:>6}")
 
@@ -521,18 +524,26 @@ def explore(port, baud, timeout, slave):
 
                 elif action == "compare":
                     if not previous_snapshot or not current_snapshot:
-                        click.echo("Necesitas dos snapshots para comparar. Usa 'save' primero.")
+                        click.echo(
+                            "Necesitas dos snapshots para comparar. Usa 'save' primero."
+                        )
                     else:
-                        candidates = find_variable_candidates(previous_snapshot, current_snapshot)
+                        candidates = find_variable_candidates(
+                            previous_snapshot, current_snapshot
+                        )
                         if not candidates:
                             click.echo("No se detectaron cambios.")
                         else:
                             click.echo(f"\nCambios detectados ({len(candidates)}):")
                             for c in candidates:
-                                click.echo(f"  [{c.address:>4}] {c.first_value} -> {c.second_value}")
+                                click.echo(
+                                    f"  [{c.address:>4}] {c.first_value} -> {c.second_value}"
+                                )
 
                 else:
-                    click.echo(f"Comando desconocido: {action}. Usa 'help' para ver comandos.")
+                    click.echo(
+                        f"Comando desconocido: {action}. Usa 'help' para ver comandos."
+                    )
 
             except click.Abort:
                 click.echo("\nSaliendo...")
