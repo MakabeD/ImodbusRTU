@@ -191,69 +191,6 @@ def _plot_dependencies_available() -> bool:
     return True
 
 
-def _build_change_overview_plot(summary_df: pd.DataFrame):
-    import matplotlib.pyplot as plt
-
-    top_df = summary_df.head(12).copy()
-    labels = [register.replace("register_", "R") for register in top_df["register"]]
-    mean_delta = top_df["mean_delta"].fillna(0)
-    max_abs_delta = top_df["max_abs_delta"].fillna(0)
-    changed_samples = top_df["changed_samples"].fillna(0)
-    colors = ["#ca8a04" if value >= 0 else "#0f766e" for value in mean_delta]
-
-    fig, axes = plt.subplots(
-        1,
-        2,
-        figsize=(16, 6),
-        gridspec_kw={"width_ratios": [1.35, 1]},
-        facecolor="#f5fbf7",
-    )
-    fig.suptitle(
-        "Register Change Overview",
-        fontsize=18,
-        fontweight="bold",
-        color="#163329",
-        y=0.98,
-    )
-
-    axes[0].barh(labels, max_abs_delta, color=colors, edgecolor="#163329", alpha=0.9)
-    axes[0].invert_yaxis()
-    axes[0].set_title("Top Registers by Max Absolute Delta", loc="left", fontsize=12)
-    axes[0].set_xlabel("Max |delta|")
-    axes[0].grid(axis="x", linestyle="--", alpha=0.25)
-    axes[0].set_facecolor("#ffffff")
-
-    scatter = axes[1].scatter(
-        changed_samples,
-        max_abs_delta,
-        s=(changed_samples + 1) * 45,
-        c=mean_delta,
-        cmap="RdYlGn_r",
-        edgecolors="#163329",
-        linewidths=0.7,
-        alpha=0.95,
-    )
-    axes[1].set_title("Stability vs Delta", loc="left", fontsize=12)
-    axes[1].set_xlabel("Changed Samples")
-    axes[1].set_ylabel("Max |delta|")
-    axes[1].grid(True, linestyle="--", alpha=0.25)
-    axes[1].set_facecolor("#ffffff")
-    for _, row in top_df.iterrows():
-        axes[1].annotate(
-            row["register"].replace("register_", "R"),
-            (row["changed_samples"], row["max_abs_delta"]),
-            fontsize=8,
-            xytext=(4, 4),
-            textcoords="offset points",
-            color="#163329",
-        )
-    colorbar = fig.colorbar(scatter, ax=axes[1], shrink=0.86)
-    colorbar.set_label("Mean delta")
-
-    fig.tight_layout()
-    return fig
-
-
 def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df: pd.DataFrame):
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -344,54 +281,6 @@ def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df:
     return fig
 
 
-def _build_heatmap_plot(delta_df: pd.DataFrame, registers: list[str]):
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    heatmap_df = delta_df[registers].copy()
-    sample_labels = (
-        delta_df["sample_index"].tolist()
-        if "sample_index" in delta_df.columns
-        else list(range(len(delta_df)))
-    )
-    if len(heatmap_df) > 160:
-        sample_idx = np.linspace(0, len(heatmap_df) - 1, 160, dtype=int)
-        heatmap_df = heatmap_df.iloc[sample_idx]
-        sample_labels = [sample_labels[index] for index in sample_idx]
-
-    values = heatmap_df.T.values.astype(float)
-    finite_mask = ~pd.isna(values)
-    max_abs = float(abs(values[finite_mask]).max()) if finite_mask.any() else 1.0
-    if max_abs == 0:
-        max_abs = 1.0
-
-    fig, ax = plt.subplots(figsize=(16, 6), facecolor="#f5fbf7")
-    image = ax.imshow(
-        values,
-        aspect="auto",
-        cmap="RdYlGn_r",
-        vmin=-max_abs,
-        vmax=max_abs,
-    )
-    ax.set_title("Delta Heatmap by Register and Sample", loc="left", fontsize=14)
-    ax.set_xlabel("Sample slice")
-    ax.set_ylabel("Register")
-    ax.set_yticks(range(len(registers)))
-    ax.set_yticklabels([register.replace("register_", "R") for register in registers])
-
-    xtick_count = min(len(heatmap_df), 8)
-    if xtick_count > 0:
-        xticks = np.linspace(0, len(heatmap_df) - 1, xtick_count, dtype=int)
-        ax.set_xticks(xticks)
-        labels = [sample_labels[index] for index in xticks]
-        ax.set_xticklabels(labels)
-
-    colorbar = fig.colorbar(image, ax=ax, shrink=0.9)
-    colorbar.set_label("Delta")
-    fig.tight_layout()
-    return fig
-
-
 def render_dashboard_plots(
     left_df: pd.DataFrame,
     right_df: pd.DataFrame,
@@ -399,7 +288,7 @@ def render_dashboard_plots(
     delta_df: pd.DataFrame,
     output_path: str | Path | None,
 ) -> dict[str, str] | None:
-    if output_path is None or summary_df.empty or delta_df.empty:
+    if output_path is None or summary_df.empty:
         return None
     if not _plot_dependencies_available():
         return None
@@ -413,26 +302,16 @@ def render_dashboard_plots(
     resolved_output_path.parent.mkdir(parents=True, exist_ok=True)
     stem = resolved_output_path.stem or "dashboard"
 
-    overview_fig = _build_change_overview_plot(summary_df)
     trend_fig = _build_trend_plot(left_df, right_df, summary_df)
-    heatmap_fig = _build_heatmap_plot(delta_df, summary_df["register"].tolist())
 
-    overview_path = resolved_output_path.parent / f"{stem}_overview.png"
     trend_path = resolved_output_path.parent / f"{stem}_trends.png"
-    heatmap_path = resolved_output_path.parent / f"{stem}_heatmap.png"
 
-    overview_fig.savefig(overview_path, dpi=220, bbox_inches="tight", facecolor="#f5fbf7")
     trend_fig.savefig(trend_path, dpi=220, bbox_inches="tight", facecolor="#f5fbf7")
-    heatmap_fig.savefig(heatmap_path, dpi=220, bbox_inches="tight", facecolor="#f5fbf7")
 
-    plt.close(overview_fig)
     plt.close(trend_fig)
-    plt.close(heatmap_fig)
 
     return {
-        "overview": str(overview_path),
         "trends": str(trend_path),
-        "heatmap": str(heatmap_path),
     }
 
 
@@ -450,9 +329,7 @@ def _image_sections(plots: dict[str, str] | None, html_output_path: Path | None)
 
     sections: list[str] = []
     titles = {
-        "overview": "Overview Plot",
         "trends": "Trend Comparison",
-        "heatmap": "Delta Heatmap",
     }
     for key, title in titles.items():
         if key not in plots:
@@ -694,7 +571,7 @@ def render_dashboard_html(
 
     <section class="section">
       <h2>Visual Analysis</h2>
-      <p class="caption">The plots highlight the strongest register shifts, how both runs evolve over time, and where deltas concentrate across the experiment.</p>
+      <p class="caption">This trend plot compares how the most dynamic registers evolve across both runs.</p>
       <div class="plot-grid">
         {plot_sections}
       </div>
