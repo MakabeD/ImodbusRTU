@@ -40,3 +40,13 @@ Comparar dos corridas guardadas y generar dashboard:
 ```powershell
 .venv\Scripts\python.exe modbusRTU.py compare-runs --left-table run_grounded --right-table run_not_grounded --output-path data/dashboard.html
 ```
+
+Calcular estadisticas por registro entre una corrida en aire y una en tierra:
+
+```powershell
+.venv\Scripts\python.exe modbusRTU.py variability-report --air-run run_air --soil-run run_soil --output data/variability.csv
+```
+
+El reporte muestra por registro la media y desviacion de cada estado, el delta
+(mean soil - mean air) y un change score (LOW/MEDIUM/HIGH) basado en el efecto
+estandarizado (Cohen's d). Agrega `--show-all` para incluir registros sin cambio.

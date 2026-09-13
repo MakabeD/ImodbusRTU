@@ -13,6 +13,12 @@ from compute.modbus_compute import (
     find_variable_candidates,
 )
 from compute.monitoring import monitor_with_client
+from compute.variability import (
+    build_variability_report,
+    export_variability_csv,
+    load_state_pair,
+    render_variability_report,
+)
 
 
 def setup_logging(verbose: bool, quiet: bool):
@@ -396,6 +402,53 @@ def compare_runs(database_path, left_table, right_table, output_path):
     click.echo("")
     click.echo("Resumen de cambios por registro:")
     click.echo(dashboard.summary_df.to_string(index=False))
+
+
+@cli.command("variability-report")
+@click.option(
+    "--database-path",
+    default="data/monitoring.sqlite",
+    show_default=True,
+    help="Archivo SQLite donde se guardan las corridas.",
+)
+@click.option(
+    "--air-run",
+    required=True,
+    help="Nombre de la tabla de la corrida con el sensor al aire.",
+)
+@click.option(
+    "--soil-run",
+    required=True,
+    help="Nombre de la tabla de la corrida con el sensor tocando tierra.",
+)
+@click.option(
+    "--top-n",
+    default=None,
+    type=int,
+    help="Mostrar solo los N registros con mayor cambio.",
+)
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(),
+    help="Ruta del CSV de salida con el reporte completo.",
+)
+@click.option(
+    "--show-all",
+    is_flag=True,
+    help="Incluir registros sin cambio detectado (NONE).",
+)
+def variability_report(database_path, air_run, soil_run, top_n, output, show_all):
+    """Calcula estadisticas por registro entre una corrida en aire y una en tierra."""
+    air_df, soil_df = load_state_pair(database_path, air_run, soil_run)
+
+    report = build_variability_report(air_df, soil_df)
+
+    click.echo(render_variability_report(report, top_n=top_n, show_all=show_all))
+
+    if output:
+        exported_path = export_variability_csv(report, output)
+        click.echo(f"Reporte completo exportado a {exported_path}")
 
 
 EXPLORE_COMMANDS = {
