@@ -28,6 +28,8 @@ def _safe_sigma(value) -> float:
 
 
 def _pooled_sigma(sigma_air, sigma_soil) -> float:
+    if pd.isna(sigma_air) or pd.isna(sigma_soil):
+        return float("nan")
     s_air = _safe_sigma(sigma_air)
     s_soil = _safe_sigma(sigma_soil)
     return math.sqrt((s_air ** 2 + s_soil ** 2) / 2)
@@ -38,6 +40,8 @@ def effect_size(delta, sigma_air, sigma_soil) -> float:
         return 0.0
     if float(delta) == 0:
         return 0.0
+    if pd.isna(sigma_air) or pd.isna(sigma_soil):
+        return float("nan")
     s_air = _safe_sigma(sigma_air)
     s_soil = _safe_sigma(sigma_soil)
     if s_air == 0 and s_soil == 0:
@@ -56,6 +60,9 @@ def classify_change_score(
     medium_threshold: float = 1.5,
 ) -> str:
     if delta is None or pd.isna(delta) or float(delta) == 0:
+        return CHANGE_SCORE_NONE
+
+    if pd.isna(sigma_air) or pd.isna(sigma_soil):
         return CHANGE_SCORE_NONE
 
     s_air = _safe_sigma(sigma_air)
@@ -126,11 +133,29 @@ def build_variability_report(
 
     rows: list[dict[str, object]] = []
     for column in _register_columns(air_df):
-        register = int(column.split("_", 1)[1])
+        try:
+            register = int(column.removeprefix("register_"))
+        except ValueError:
+            continue
         air = pd.to_numeric(air_df[column], errors="coerce").dropna()
         soil = pd.to_numeric(soil_df[column], errors="coerce").dropna()
 
         if air.empty or soil.empty:
+            rows.append(
+                {
+                    "register": register,
+                    "n_air": len(air),
+                    "n_soil": len(soil),
+                    "mean_air": float(air.mean()) if not air.empty else float("nan"),
+                    "mean_soil": float(soil.mean()) if not soil.empty else float("nan"),
+                    "delta": float("nan"),
+                    "sigma_air": float("nan"),
+                    "sigma_soil": float("nan"),
+                    "pooled_sigma": float("nan"),
+                    "d": float("nan"),
+                    "change_score": CHANGE_SCORE_NONE,
+                }
+            )
             continue
 
         mean_air = float(air.mean())
@@ -142,6 +167,8 @@ def build_variability_report(
         rows.append(
             {
                 "register": register,
+                "n_air": len(air),
+                "n_soil": len(soil),
                 "mean_air": mean_air,
                 "mean_soil": mean_soil,
                 "delta": delta,
@@ -202,6 +229,8 @@ def render_variability_report(
     for _, row in display.iterrows():
         lines.append(f"Register {row['register']}")
         lines.append("-" * 16)
+        lines.append(f"{'Muestras air:':>14} {row['n_air']}")
+        lines.append(f"{'Muestras soil:':>14} {row['n_soil']}")
         lines.append(f"{'Mean air:':>14} {_format_number(row['mean_air'])}")
         lines.append(f"{'Mean soil:':>14} {_format_number(row['mean_soil'])}")
         lines.append(f"{'Δ:':>14} {_format_number(row['delta'], force_sign=True)}")
