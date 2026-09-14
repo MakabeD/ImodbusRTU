@@ -3,3 +3,5 @@
 */__pycache__/
 /ignore/
 /data/
+.opencode/
+.pytest_cache/
