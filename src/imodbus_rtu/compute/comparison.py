@@ -7,8 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from imodbus_rtu.compute.monitoring import ensure_monitoring_schema
-from imodbus_rtu.compute.monitoring import load_run_dataframe
+from imodbus_rtu.compute.monitoring import ensure_monitoring_schema, load_run_dataframe
 
 
 @dataclass(frozen=True)
@@ -44,9 +43,7 @@ def _alignment_column(left_df: pd.DataFrame, right_df: pd.DataFrame) -> str:
         return "sample_index"
     if "sample_timestamp" in left_df.columns and "sample_timestamp" in right_df.columns:
         return "sample_timestamp"
-    raise ValueError(
-        "Las tablas deben compartir sample_index o sample_timestamp para alinearse."
-    )
+    raise ValueError("Las tablas deben compartir sample_index o sample_timestamp para alinearse.")
 
 
 def _validate_comparable_tables(left_df: pd.DataFrame, right_df: pd.DataFrame):
@@ -220,7 +217,7 @@ def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df:
         y=0.995,
     )
 
-    for axis, register in zip(axes, trend_registers):
+    for axis, register in zip(axes, trend_registers, strict=True):
         left_series = pd.to_numeric(left_df[register], errors="coerce")
         right_series = pd.to_numeric(right_df[register], errors="coerce")
 
@@ -245,22 +242,12 @@ def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df:
             markersize=3,
             label="Right run",
         )
-        
+
         axis.axhline(
-            left_mean, 
-            color="#0f766e", 
-            linestyle="--", 
-            linewidth=1.5, 
-            alpha=0.6, 
-            label="Avg Left"
+            left_mean, color="#0f766e", linestyle="--", linewidth=1.5, alpha=0.6, label="Avg Left"
         )
         axis.axhline(
-            right_mean, 
-            color="#ca8a04", 
-            linestyle="--", 
-            linewidth=1.5, 
-            alpha=0.6, 
-            label="Avg Right"
+            right_mean, color="#ca8a04", linestyle="--", linewidth=1.5, alpha=0.6, label="Avg Right"
         )
 
         axis.fill_between(
@@ -273,8 +260,8 @@ def _build_trend_plot(left_df: pd.DataFrame, right_df: pd.DataFrame, summary_df:
         axis.set_title(register.replace("register_", "Register "), loc="left", fontsize=11)
         axis.grid(True, linestyle="--", alpha=0.24)
         axis.set_facecolor("#ffffff")
-        
-        axis.legend(loc="upper right", ncol=2) 
+
+        axis.legend(loc="upper right", ncol=2)
 
     axes[-1].set_xlabel("Sample index")
     fig.tight_layout()
@@ -372,9 +359,7 @@ def render_dashboard_html(
         "right_max",
     ]:
         if numeric_column in styled_summary.columns:
-            styled_summary[numeric_column] = styled_summary[numeric_column].map(
-                _format_number
-            )
+            styled_summary[numeric_column] = styled_summary[numeric_column].map(_format_number)
 
     delta_preview = delta_df.head(24).copy()
     for column in delta_preview.columns:

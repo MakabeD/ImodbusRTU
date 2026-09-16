@@ -1,5 +1,4 @@
 import logging
-import sys
 
 import click
 import serial
@@ -67,9 +66,7 @@ def parse_registers(registers: str) -> list[int]:
     try:
         return [int(item) for item in parts]
     except ValueError as error:
-        raise click.BadParameter(
-            "Los registros deben ser enteros separados por comas."
-        ) from error
+        raise click.BadParameter("Los registros deben ser enteros separados por comas.") from error
 
 
 def render_registers(registers: list[RegisterValue], verbose: bool = False):
@@ -83,8 +80,7 @@ def render_registers(registers: list[RegisterValue], verbose: bool = False):
 
     for item in registers:
         click.echo(
-            f"  Registro {item.address:>4} -> valor {item.value:>6} "
-            f"(esclavo {item.slave_id})"
+            f"  Registro {item.address:>4} -> valor {item.value:>6} (esclavo {item.slave_id})"
         )
 
 
@@ -249,9 +245,7 @@ def analyze(
             click.echo("No se encontraron esclavos Modbus que respondan en ese rango.")
             return
 
-        click.echo(
-            f"Direcciones activas detectadas: {', '.join(map(str, found_slaves))}"
-        )
+        click.echo(f"Direcciones activas detectadas: {', '.join(map(str, found_slaves))}")
         click.echo("")
         first_snapshot = analyze_registers(
             client=client,
@@ -467,9 +461,7 @@ EXPLORE_COMMANDS = {
 @click.option("--port", required=True, help="Nombre del puerto, por ejemplo COM3.")
 @click.option("--baud", default=9600, show_default=True, help="Baudios.")
 @click.option("--timeout", default=0.2, show_default=True, help="Timeout en segundos.")
-@click.option(
-    "--slave", default=1, show_default=True, type=int, help="Direccion del esclavo."
-)
+@click.option("--slave", default=1, show_default=True, type=int, help="Direccion del esclavo.")
 def explore(port, baud, timeout, slave):
     """Modo interactivo para explorar registros Modbus."""
     click.echo("=== Modo Explorador Modbus RTU ===")
@@ -525,9 +517,7 @@ def explore(port, baud, timeout, slave):
                     for addr in addresses:
                         values = client.read_holding_registers(slave, addr, 1)
                         if values:
-                            reg = RegisterValue(
-                                slave_id=slave, address=addr, value=values[0]
-                            )
+                            reg = RegisterValue(slave_id=slave, address=addr, value=values[0])
                             current_snapshot.append(reg)
                             click.echo(f"  [{addr}] = {values[0]}")
                         else:
@@ -557,13 +547,9 @@ def explore(port, baud, timeout, slave):
 
                 elif action == "dump":
                     if not current_snapshot:
-                        click.echo(
-                            "No hay datos guardados. Usa 'read' o 'scan' primero."
-                        )
+                        click.echo("No hay datos guardados. Usa 'read' o 'scan' primero.")
                     else:
-                        click.echo(
-                            f"\nSnapshot actual ({len(current_snapshot)} registros):"
-                        )
+                        click.echo(f"\nSnapshot actual ({len(current_snapshot)} registros):")
                         for reg in current_snapshot:
                             click.echo(f"  [{reg.address:>4}] = {reg.value:>6}")
 
@@ -577,13 +563,9 @@ def explore(port, baud, timeout, slave):
 
                 elif action == "compare":
                     if not previous_snapshot or not current_snapshot:
-                        click.echo(
-                            "Necesitas dos snapshots para comparar. Usa 'save' primero."
-                        )
+                        click.echo("Necesitas dos snapshots para comparar. Usa 'save' primero.")
                     else:
-                        candidates = find_variable_candidates(
-                            previous_snapshot, current_snapshot
-                        )
+                        candidates = find_variable_candidates(previous_snapshot, current_snapshot)
                         if not candidates:
                             click.echo("No se detectaron cambios.")
                         else:
@@ -594,9 +576,7 @@ def explore(port, baud, timeout, slave):
                                 )
 
                 else:
-                    click.echo(
-                        f"Comando desconocido: {action}. Usa 'help' para ver comandos."
-                    )
+                    click.echo(f"Comando desconocido: {action}. Usa 'help' para ver comandos.")
 
             except click.Abort:
                 click.echo("\nSaliendo...")

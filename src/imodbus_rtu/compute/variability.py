@@ -9,7 +9,6 @@ import pandas as pd
 from imodbus_rtu.compute.comparison import _register_columns
 from imodbus_rtu.compute.monitoring import load_run_dataframe
 
-
 CHANGE_SCORE_LOW = "LOW"
 CHANGE_SCORE_MEDIUM = "MEDIUM"
 CHANGE_SCORE_HIGH = "HIGH"
@@ -32,7 +31,7 @@ def _pooled_sigma(sigma_air, sigma_soil) -> float:
         return float("nan")
     s_air = _safe_sigma(sigma_air)
     s_soil = _safe_sigma(sigma_soil)
-    return math.sqrt((s_air ** 2 + s_soil ** 2) / 2)
+    return math.sqrt((s_air**2 + s_soil**2) / 2)
 
 
 def effect_size(delta, sigma_air, sigma_soil) -> float:

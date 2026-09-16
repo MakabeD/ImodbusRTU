@@ -79,9 +79,7 @@ class TestFindVariableCandidates:
         ]
 
     def test_no_overlap_returns_empty(self):
-        assert find_variable_candidates(
-            [RegisterValue(1, 0, 1)], [RegisterValue(2, 0, 1)]
-        ) == []
+        assert find_variable_candidates([RegisterValue(1, 0, 1)], [RegisterValue(2, 0, 1)]) == []
 
 
 class TestPlotBaseFrame:
@@ -155,9 +153,7 @@ class TestReadHoldingRegisters:
     def test_serial_exception_returns_empty(self):
         import serial
 
-        client = build_client(
-            FakeSerial(error_on_read=serial.SerialException("port gone"))
-        )
+        client = build_client(FakeSerial(error_on_read=serial.SerialException("port gone")))
         assert client.read_holding_registers(slave_id=1, address=30, count=1) == []
 
     def test_closed_port_returns_empty(self):
@@ -182,9 +178,7 @@ class TestProbeAndScans:
         responses = [response_for(10), b"", response_for(30)]
         client = build_client(FakeSerial(responses=responses))
         found = client.scan_registers(1, 0, 2, delay=0)
-        assert [
-            (item.address, item.value) for item in found
-        ] == [(0, 10), (2, 30)]
+        assert [(item.address, item.value) for item in found] == [(0, 10), (2, 30)]
 
     def test_scan_slave_addresses_finds_responders(self):
         def response_for(slave):

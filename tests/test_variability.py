@@ -160,9 +160,7 @@ class TestValidateStatePair:
 
     def test_mismatched_slaves(self):
         with pytest.raises(ValueError, match="esclavos"):
-            _validate_state_pair(
-                make_run({0: [1.0]}, slave_id=1), make_run({0: [1.0]}, slave_id=2)
-            )
+            _validate_state_pair(make_run({0: [1.0]}, slave_id=1), make_run({0: [1.0]}, slave_id=2))
 
 
 @pytest.fixture

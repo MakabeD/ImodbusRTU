@@ -3,16 +3,14 @@ from __future__ import annotations
 import re
 import sqlite3
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable
-from typing import Iterable
 
 import pandas as pd
 
 from imodbus_rtu.compute.modbus_compute import MasterModbusCompute
-
 
 RegisterReader = Callable[[int, int], int | None]
 

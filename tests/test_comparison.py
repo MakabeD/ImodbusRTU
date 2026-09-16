@@ -2,12 +2,12 @@ import pandas as pd
 import pytest
 
 from imodbus_rtu.compute.comparison import (
+    _alignment_column,
+    _validate_comparable_tables,
     build_delta_dataframe,
     build_summary_dataframe,
     compare_dataframes,
     list_monitoring_tables,
-    _alignment_column,
-    _validate_comparable_tables,
 )
 
 
@@ -48,9 +48,7 @@ class TestValidateComparableTables:
 
     def test_slave_mismatch_raises(self):
         with pytest.raises(ValueError, match="esclavos"):
-            _validate_comparable_tables(
-                run_df({0: [1]}, slave_id=1), run_df({0: [1]}, slave_id=2)
-            )
+            _validate_comparable_tables(run_df({0: [1]}, slave_id=1), run_df({0: [1]}, slave_id=2))
 
 
 class TestDeltaAndSummary:
@@ -111,8 +109,9 @@ class TestListMonitoringTables:
     def test_empty_database_returns_dataframe(self, tmp_path):
         database_path = tmp_path / "monitoring.sqlite"
         # create the schema without runs
-        from imodbus_rtu.compute.monitoring import ensure_monitoring_schema
         import sqlite3
+
+        from imodbus_rtu.compute.monitoring import ensure_monitoring_schema
 
         with sqlite3.connect(database_path) as connection:
             ensure_monitoring_schema(connection)
