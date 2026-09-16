@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imodbus-rtu"
+version = "0.1.0"
+description = "CLI para lectura, monitoreo y analisis de sensores via Modbus RTU."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "click>=8.3",
+    "colorama>=0.4.6",
+    "matplotlib>=3.10",
+    "numpy>=2.2",
+    "pandas>=2.3",
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+imodbus = "imodbus_rtu.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]

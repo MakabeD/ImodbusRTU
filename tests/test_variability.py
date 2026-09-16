@@ -4,7 +4,7 @@ import sqlite3
 import pandas as pd
 import pytest
 
-from compute.variability import (
+from imodbus_rtu.compute.variability import (
     CHANGE_SCORE_HIGH,
     CHANGE_SCORE_LOW,
     CHANGE_SCORE_MEDIUM,

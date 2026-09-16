@@ -1,6 +1,6 @@
 import pytest
 
-from compute.modbus_compute import (
+from imodbus_rtu.compute.modbus_compute import (
     MasterModbusCompute,
     RegisterValue,
     VariableCandidate,

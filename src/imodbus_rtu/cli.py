@@ -5,15 +5,15 @@ import click
 import serial
 import serial.tools.list_ports
 
-from compute.comparison import compare_sqlite_tables, list_monitoring_tables
-from compute.modbus_compute import (
+from imodbus_rtu.compute.comparison import compare_sqlite_tables, list_monitoring_tables
+from imodbus_rtu.compute.modbus_compute import (
     MasterModbusCompute,
     RegisterValue,
     VariableCandidate,
     find_variable_candidates,
 )
-from compute.monitoring import monitor_with_client
-from compute.variability import (
+from imodbus_rtu.compute.monitoring import monitor_with_client
+from imodbus_rtu.compute.variability import (
     build_variability_report,
     export_variability_csv,
     load_state_pair,

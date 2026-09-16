@@ -3,7 +3,7 @@ import sqlite3
 import pandas as pd
 import pytest
 
-from compute.monitoring import (
+from imodbus_rtu.compute.monitoring import (
     build_run_dataframe,
     load_run_dataframe,
     sanitize_table_name,

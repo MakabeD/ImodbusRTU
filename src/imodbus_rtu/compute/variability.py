@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from compute.comparison import _register_columns
-from compute.monitoring import load_run_dataframe
+from imodbus_rtu.compute.comparison import _register_columns
+from imodbus_rtu.compute.monitoring import load_run_dataframe
 
 
 CHANGE_SCORE_LOW = "LOW"

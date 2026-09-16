@@ -11,7 +11,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from compute.modbus_compute import MasterModbusCompute
+from imodbus_rtu.compute.modbus_compute import MasterModbusCompute
 
 
 RegisterReader = Callable[[int, int], int | None]

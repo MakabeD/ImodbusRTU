@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from compute.comparison import (
+from imodbus_rtu.compute.comparison import (
     build_delta_dataframe,
     build_summary_dataframe,
     compare_dataframes,
@@ -111,7 +111,7 @@ class TestListMonitoringTables:
     def test_empty_database_returns_dataframe(self, tmp_path):
         database_path = tmp_path / "monitoring.sqlite"
         # create the schema without runs
-        from compute.monitoring import ensure_monitoring_schema
+        from imodbus_rtu.compute.monitoring import ensure_monitoring_schema
         import sqlite3
 
         with sqlite3.connect(database_path) as connection:

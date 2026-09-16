@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from compute.monitoring import ensure_monitoring_schema
-from compute.monitoring import load_run_dataframe
+from imodbus_rtu.compute.monitoring import ensure_monitoring_schema
+from imodbus_rtu.compute.monitoring import load_run_dataframe
 
 
 @dataclass(frozen=True)
