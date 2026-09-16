@@ -196,6 +196,16 @@ class MasterModbusCompute:
         if error_response == []:
             return []
 
+        # A normal response must be exact; exception frames (5 bytes) were
+        # already handled above. A short frame would silently parse as zeros.
+        if len(holding_registers) != expected_length:
+            print(
+                f"Respuesta incompleta del esclavo {slave_id} "
+                f"({len(holding_registers)}/{expected_length} bytes). "
+                "La lectura se descarta."
+            )
+            return []
+
         return registers_compute(holding_registers, count)
 
     def probe_slave(

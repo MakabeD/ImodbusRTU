@@ -83,21 +83,28 @@ def build_run_dataframe(
     base_time = started_at or datetime.now(timezone.utc)
     rows: list[dict[str, object]] = []
 
-    for sample_index in range(sample_count):
-        row: dict[str, object] = {
-            "run_name": run_name,
-            "slave_id": slave_id,
-            "sample_index": sample_index,
-            "sample_timestamp": (
-                base_time + timedelta(seconds=sample_index * sample_every_seconds)
-            ).isoformat(),
-        }
-        for register in register_list:
-            row[f"register_{register}"] = reader(slave_id, register)
-        rows.append(row)
+    try:
+        for sample_index in range(sample_count):
+            row: dict[str, object] = {
+                "run_name": run_name,
+                "slave_id": slave_id,
+                "sample_index": sample_index,
+                "sample_timestamp": (
+                    base_time + timedelta(seconds=sample_index * sample_every_seconds)
+                ).isoformat(),
+            }
+            for register in register_list:
+                row[f"register_{register}"] = reader(slave_id, register)
+            rows.append(row)
 
-        if sample_index < sample_count - 1:
-            sleep_fn(sample_every_seconds)
+            if sample_index < sample_count - 1:
+                sleep_fn(sample_every_seconds)
+    except KeyboardInterrupt:
+        # Persist whatever was collected so far instead of losing the run.
+        print(
+            "Monitoreo interrumpido por el usuario. "
+            f"Se conservan {len(rows)} de {sample_count} muestras."
+        )
 
     return pd.DataFrame(rows)
 
@@ -219,6 +226,19 @@ def monitor_with_client(
     )
 
 
+def table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
 def load_run_dataframe(database_path: str | Path, table_name: str) -> pd.DataFrame:
     with sqlite3.connect(database_path) as connection:
+        if not table_exists(connection, table_name):
+            raise ValueError(
+                f"La tabla '{table_name}' no existe en la base de datos. "
+                "Verifica el nombre con 'list-runs'."
+            )
         return pd.read_sql_query(f'SELECT * FROM "{table_name}"', connection)

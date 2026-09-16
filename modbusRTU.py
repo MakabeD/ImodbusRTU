@@ -455,7 +455,7 @@ EXPLORE_COMMANDS = {
     "help": "Mostrar comandos disponibles",
     "read": "Leer uno o mas registros (ej: read 0, read 0-10)",
     "scan": "Escanear rango de registros (ej: scan 0 67)",
-    " slaves": "Detectar esclavos activos",
+    "slaves": "Detectar esclavos activos",
     "dump": "Mostrar ultimo snapshot leido",
     "save": "Guardar snapshot actual (ej: save nombre)",
     "compare": "Comparar con snapshot anterior",
