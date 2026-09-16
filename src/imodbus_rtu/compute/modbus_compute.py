@@ -52,8 +52,7 @@ def registers_compute(registers: bytes, count: int) -> list[int]:
         return []
 
     decimal_registers = [
-        int.from_bytes(registers[3 + 2 * i : 5 + 2 * i], byteorder="big")
-        for i in range(count)
+        int.from_bytes(registers[3 + 2 * i : 5 + 2 * i], byteorder="big") for i in range(count)
     ]
     return decimal_registers
 
@@ -129,7 +128,7 @@ class MasterModbusCompute:
         self.timeout = timeout
         self.serial: serial.Serial | None = None
 
-    def __enter__(self) -> "MasterModbusCompute":
+    def __enter__(self) -> MasterModbusCompute:
         self.connect()
         return self
 
@@ -196,11 +195,19 @@ class MasterModbusCompute:
         if error_response == []:
             return []
 
+        # A normal response must be exact; exception frames (5 bytes) were
+        # already handled above. A short frame would silently parse as zeros.
+        if len(holding_registers) != expected_length:
+            print(
+                f"Respuesta incompleta del esclavo {slave_id} "
+                f"({len(holding_registers)}/{expected_length} bytes). "
+                "La lectura se descarta."
+            )
+            return []
+
         return registers_compute(holding_registers, count)
 
-    def probe_slave(
-        self, slave_id: int, probe_address: int = 0, count: int = 1
-    ) -> bool:
+    def probe_slave(self, slave_id: int, probe_address: int = 0, count: int = 1) -> bool:
         return bool(
             self.read_holding_registers(
                 slave_id=slave_id,
@@ -255,9 +262,7 @@ class MasterModbusCompute:
         return found_registers
 
     @staticmethod
-    def plot_base(
-        slave: int, function_code: int, address: int, count: int
-    ) -> bytearray:
+    def plot_base(slave: int, function_code: int, address: int, count: int) -> bytearray:
         plot_base = bytearray([slave, function_code])
         plot_base.extend(address.to_bytes(2, "big"))
         plot_base.extend(count.to_bytes(2, "big"))
