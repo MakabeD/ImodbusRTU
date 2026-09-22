@@ -122,30 +122,30 @@ def analyze_registers(
     total_registers = (register_end - register_start + 1) * len(slave_ids)
     current = 0
 
+    def on_progress(done: int, total: int):
+        nonlocal current
+        current += done
+        render_progress_bar(current, total_registers, prefix="Progreso: ")
+
     for slave_id in slave_ids:
         if show_progress:
             click.echo(
                 f"\n[Esclavo {slave_id}] Escaneando registros {register_start}-{register_end}..."
             )
 
-        for address in range(register_start, register_end + 1):
-            values = client.read_holding_registers(
-                slave_id=slave_id, address=address, count=1, quiet=show_progress
-            )
-            if values:
-                snapshot.append(
-                    RegisterValue(
-                        slave_id=slave_id,
-                        address=address,
-                        value=values[0],
-                    )
-                )
-            current += 1
-            if show_progress:
-                render_progress_bar(current, total_registers, prefix="Progreso: ")
+        slave_registers = client.read_register_block(
+            slave_id=slave_id,
+            register_start=register_start,
+            register_end=register_end,
+            quiet=show_progress,
+            on_progress=on_progress if show_progress else None,
+        )
+        snapshot.extend(slave_registers)
+        if show_progress:
+            click.echo()
 
         # Always render registers for each slave
-        render_registers([r for r in snapshot if r.slave_id == slave_id])
+        render_registers(slave_registers)
 
     if show_progress:
         click.echo(f"\nTotal de registros leidos: {len(snapshot)}")

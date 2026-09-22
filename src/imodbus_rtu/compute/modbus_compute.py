@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import serial
@@ -16,6 +17,13 @@ if not hasattr(serial, "PARITY_NONE"):
 
 
 READ_HOLDING_REGISTER = 3
+
+# Modbus spec limit: up to 125 holding registers per read request.
+MAX_REGISTERS_PER_READ = 125
+
+# Extra time on top of the theoretical frame transmission time, so slow
+# devices still answer before the read times out.
+RESPONSE_TIME_MARGIN = 1.5
 
 
 @dataclass(frozen=True)
@@ -175,7 +183,11 @@ class MasterModbusCompute:
             self.serial.reset_input_buffer()
             self.serial.reset_output_buffer()
             self.serial.write(frame)
-            time.sleep(self.timeout)
+            # serial.read blocks until the full frame arrives or the timeout
+            # elapses, so no extra sleep is needed. The timeout is scaled to
+            # the frame size: at 9600 baud a 255-byte response takes ~270 ms,
+            # longer than the default 0.2 s timeout.
+            self.serial.timeout = max(self.timeout, self._transmission_seconds(expected_length))
             holding_registers = self.serial.read(expected_length)
         except serial.SerialException as error:
             print(f"Fallo de comunicacion con el esclavo {slave_id}: {error}")
@@ -216,6 +228,60 @@ class MasterModbusCompute:
             )
         )
 
+    def _transmission_seconds(self, frame_length: int) -> float:
+        bits_per_char = 1 + self.bytesize + (1 if self.parity != serial.PARITY_NONE else 0)
+        bits_per_char += 1 if self.stopbits == serial.STOPBITS_ONE else 2
+        return frame_length * bits_per_char / self.baudrate * RESPONSE_TIME_MARGIN
+
+    def read_register_block(
+        self,
+        slave_id: int,
+        register_start: int,
+        register_end: int,
+        quiet: bool = False,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> list[RegisterValue]:
+        """Read a contiguous register range using batched requests.
+
+        Reads up to MAX_REGISTERS_PER_READ registers per Modbus frame. When a
+        batched request fails (no answer, CRC error or Modbus exception) the
+        chunk degrades to per-register reads, so devices that reject large
+        reads or have address holes still get scanned.
+        """
+        found: list[RegisterValue] = []
+        total = register_end - register_start + 1
+        processed = 0
+        address = register_start
+
+        while address <= register_end:
+            chunk_end = min(address + MAX_REGISTERS_PER_READ - 1, register_end)
+            count = chunk_end - address + 1
+            values = self.read_holding_registers(
+                slave_id=slave_id, address=address, count=count, quiet=quiet
+            )
+
+            if len(values) == count:
+                found.extend(
+                    RegisterValue(slave_id=slave_id, address=address + offset, value=value)
+                    for offset, value in enumerate(values)
+                )
+            else:
+                for register in range(address, chunk_end + 1):
+                    single = self.read_holding_registers(
+                        slave_id=slave_id, address=register, count=1, quiet=quiet
+                    )
+                    if single:
+                        found.append(
+                            RegisterValue(slave_id=slave_id, address=register, value=single[0])
+                        )
+
+            processed += count
+            if on_progress is not None:
+                on_progress(processed, total)
+            address = chunk_end + 1
+
+        return found
+
     def scan_slave_addresses(
         self,
         slave_start: int = 1,
@@ -238,28 +304,17 @@ class MasterModbusCompute:
         slave_id: int,
         register_start: int,
         register_end: int,
-        count: int = 1,
         delay: float = 0.02,
     ) -> list[RegisterValue]:
-        found_registers: list[RegisterValue] = []
-        for address in range(register_start, register_end + 1):
-            values = self.read_holding_registers(
-                slave_id=slave_id,
-                address=address,
-                count=count,
-            )
-            if values:
-                found_registers.append(
-                    RegisterValue(
-                        slave_id=slave_id,
-                        address=address,
-                        value=values[0],
-                    )
-                )
-            if delay > 0:
-                time.sleep(delay)
-
-        return found_registers
+        """Read a register range in batches with a small bus pacing delay."""
+        found = self.read_register_block(
+            slave_id=slave_id,
+            register_start=register_start,
+            register_end=register_end,
+        )
+        if delay > 0 and register_start <= register_end:
+            time.sleep(delay)
+        return found
 
     @staticmethod
     def plot_base(slave: int, function_code: int, address: int, count: int) -> bytearray:
