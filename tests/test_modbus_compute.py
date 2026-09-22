@@ -98,6 +98,7 @@ class FakeSerial:
 
     def __init__(self, responses=None, error_on_read=None):
         self.is_open = True
+        self.timeout = None
         self.responses = list(responses or [])
         self.error_on_read = error_on_read
         self.written: list[bytes] = []
@@ -171,14 +172,86 @@ class TestProbeAndScans:
         client = build_client(FakeSerial(responses=[]))
         assert client.probe_slave(1) is False
 
-    def test_scan_registers_collects_readable_addresses(self):
-        def response_for(value):
-            return make_response(bytes([0x01, 0x03, 0x02]) + value.to_bytes(2, "big"))
-
-        responses = [response_for(10), b"", response_for(30)]
-        client = build_client(FakeSerial(responses=responses))
+    def test_scan_registers_delegates_to_batched_reads(self):
+        payload = bytes([0x01, 0x03, 0x06, 0x00, 0x0A, 0x00, 0x14, 0x00, 0x1E])
+        client = build_client(FakeSerial(responses=[make_response(payload)]))
         found = client.scan_registers(1, 0, 2, delay=0)
+        assert [(item.address, item.value) for item in found] == [(0, 10), (1, 20), (2, 30)]
+        assert len(client.serial.written) == 1  # single batched frame
+
+
+def make_single_payload(value: int) -> bytes:
+    return bytes([0x01, 0x03, 0x02]) + value.to_bytes(2, "big")
+
+
+class TestReadRegisterBlock:
+    def test_batch_read_uses_single_frame(self):
+        payload = bytes([0x01, 0x03, 0x06, 0x00, 0x0A, 0x00, 0x14, 0x00, 0x1E])
+        client = build_client(FakeSerial(responses=[make_response(payload)]))
+        found = client.read_register_block(1, 0, 2)
+
+        assert [(item.address, item.value) for item in found] == [(0, 10), (1, 20), (2, 30)]
+        assert len(client.serial.written) == 1
+
+    def test_batch_failure_falls_back_to_single_reads(self):
+        # First request (batch) gets no answer, singles all answer.
+        responses = [b""] + [make_response(make_single_payload(v)) for v in (10, 20, 30)]
+        client = build_client(FakeSerial(responses=responses))
+        found = client.read_register_block(1, 0, 2)
+
+        assert [(item.address, item.value) for item in found] == [(0, 10), (1, 20), (2, 30)]
+        assert len(client.serial.written) == 4  # 1 batch + 3 singles
+
+    def test_address_hole_is_filled_by_fallback(self):
+        # Batch fails, then singles: reg 0 ok, reg 1 silent, reg 2 ok.
+        responses = [
+            b"",
+            make_response(make_single_payload(10)),
+            b"",
+            make_response(make_single_payload(30)),
+        ]
+        client = build_client(FakeSerial(responses=responses))
+        found = client.read_register_block(1, 0, 2)
+
         assert [(item.address, item.value) for item in found] == [(0, 10), (2, 30)]
+
+    def test_ranges_bigger_than_limit_are_chunked(self):
+        values = [i + 1 for i in range(130)]
+        body = bytes([0x01, 0x03, 0xFA]) + b"".join(
+            value.to_bytes(2, "big") for value in values[:125]
+        )
+        body2 = bytes([0x01, 0x03, 0x0A]) + b"".join(
+            value.to_bytes(2, "big") for value in values[125:]
+        )
+        client = build_client(FakeSerial(responses=[make_response(body), make_response(body2)]))
+        found = client.read_register_block(1, 0, 129)
+
+        assert [item.value for item in found] == values
+        counts = [int.from_bytes(frame[4:6], "big") for frame in client.serial.written]
+        assert counts == [125, 5]
+
+    def test_progress_callback_reports_cumulative(self):
+        payload = bytes([0x01, 0x03, 0x06, 0x00, 0x0A, 0x00, 0x14, 0x00, 0x1E])
+        client = build_client(FakeSerial(responses=[make_response(payload)]))
+        calls: list[tuple[int, int]] = []
+        client.read_register_block(
+            1, 0, 2, on_progress=lambda done, total: calls.append((done, total))
+        )
+        assert calls == [(3, 3)]
+
+    def test_read_timeout_scales_with_frame_size(self):
+        client = build_client(FakeSerial(responses=[b""]))
+        client.read_holding_registers(slave_id=1, address=0, count=1)
+        single_timeout = client.serial.timeout
+
+        client = build_client(FakeSerial(responses=[b""]))
+        client.read_holding_registers(slave_id=1, address=0, count=125)
+        batch_timeout = client.serial.timeout
+
+        # 7 bytes vs 255 bytes at 9600 baud: the batch read needs a much
+        # longer window than the configured client timeout (0.01 s here).
+        assert single_timeout > 0.01
+        assert batch_timeout > single_timeout * 10
 
     def test_scan_slave_addresses_finds_responders(self):
         def response_for(slave):
