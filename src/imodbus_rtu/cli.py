@@ -4,6 +4,7 @@ import click
 import serial
 import serial.tools.list_ports
 
+from imodbus_rtu import config as config_module
 from imodbus_rtu.compute.comparison import compare_sqlite_tables, list_monitoring_tables
 from imodbus_rtu.compute.modbus_compute import (
     MasterModbusCompute,
@@ -20,13 +21,65 @@ from imodbus_rtu.compute.variability import (
 )
 
 
+def serial_options(func):
+    """Options shared by commands that open a serial connection.
+
+    All of them fall back to imodbus.toml ([serial] or [profiles.<name>])
+    when the flag is not passed on the command line.
+    """
+    func = click.option(
+        "--config",
+        "config_path",
+        type=click.Path(),
+        default=None,
+        help="Ruta de imodbus.toml. Por defecto se usa ./imodbus.toml.",
+    )(func)
+    func = click.option(
+        "--profile",
+        default=None,
+        help="Perfil [profiles.<nombre>] de imodbus.toml que define ajustes serial.",
+    )(func)
+    func = click.option(
+        "--port",
+        default=None,
+        help="Nombre del puerto, por ejemplo COM3. Tambien configurable en imodbus.toml.",
+    )(func)
+    func = click.option(
+        "--baud",
+        type=int,
+        default=None,
+        show_default="9600",
+        help="Baudios. Tambien configurable en imodbus.toml.",
+    )(func)
+    func = click.option(
+        "--timeout",
+        type=float,
+        default=None,
+        show_default="0.2",
+        help="Timeout en segundos. Tambien configurable en imodbus.toml.",
+    )(func)
+    return func
+
+
+def resolve_serial(port, baud, timeout, config_path, profile_name):
+    """Apply precedence: CLI flag > profile > [serial] > built-in defaults."""
+    try:
+        return config_module.resolve_serial_settings(config_path, profile_name, port, baud, timeout)
+    except (ValueError, FileNotFoundError) as error:
+        raise click.BadParameter(str(error)) from error
+
+
 def setup_logging(verbose: bool, quiet: bool):
     if quiet:
         logging.disable(logging.CRITICAL)
     elif verbose:
-        logging.basicConfig(level=logging.DEBUG, format="%(message)s")
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(levelname)s:%(name)s: %(message)s",
+        )
     else:
-        logging.basicConfig(level=logging.WARNING, format="%(message)s")
+        # Library info messages (connect/disconnect) read like normal output.
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
 @click.group()
@@ -137,7 +190,6 @@ def analyze_registers(
             slave_id=slave_id,
             register_start=register_start,
             register_end=register_end,
-            quiet=show_progress,
             on_progress=on_progress if show_progress else None,
         )
         snapshot.extend(slave_registers)
@@ -154,9 +206,7 @@ def analyze_registers(
 
 
 @cli.command()
-@click.option("--port", required=True, help="Nombre del puerto, por ejemplo COM3.")
-@click.option("--baud", default=9600, show_default=True, help="Baudios.")
-@click.option("--timeout", default=0.2, show_default=True, help="Timeout en segundos.")
+@serial_options
 @click.option(
     "--slave-start",
     default=1,
@@ -206,6 +256,8 @@ def analyze(
     port,
     baud,
     timeout,
+    config_path,
+    profile,
     slave_start,
     slave_end,
     probe_address,
@@ -220,6 +272,8 @@ def analyze(
 
     if register_start > register_end:
         raise click.BadParameter("register-start no puede ser mayor que register-end.")
+
+    port, baud, timeout = resolve_serial(port, baud, timeout, config_path, profile)
 
     with MasterModbusCompute(port=port, baudrate=baud, timeout=timeout) as client:
         if not client.serial:
@@ -284,7 +338,7 @@ def analyze(
 
 
 @cli.command("monitor-run")
-@click.option("--port", required=True, help="Nombre del puerto, por ejemplo COM3.")
+@serial_options
 @click.option("--run-name", required=True, help="Nombre del experimento a guardar.")
 @click.option("--slave", required=True, type=int, help="Direccion del esclavo.")
 @click.option(
@@ -298,8 +352,6 @@ def analyze(
     type=int,
     help="Duracion del monitoreo en minutos.",
 )
-@click.option("--baud", default=9600, show_default=True, help="Baudios.")
-@click.option("--timeout", default=0.2, show_default=True, help="Timeout en segundos.")
 @click.option(
     "--sample-every-seconds",
     default=60,
@@ -315,17 +367,20 @@ def analyze(
 )
 def monitor_run(
     port,
+    config_path,
+    profile,
+    baud,
+    timeout,
     run_name,
     slave,
     registers,
     minutes,
-    baud,
-    timeout,
     sample_every_seconds,
     database_path,
 ):
     """Monitorea registros y guarda la corrida en SQLite."""
     register_list = parse_registers(registers)
+    port, baud, timeout = resolve_serial(port, baud, timeout, config_path, profile)
 
     with MasterModbusCompute(port=port, baudrate=baud, timeout=timeout) as client:
         if not client.serial:
@@ -458,12 +513,11 @@ EXPLORE_COMMANDS = {
 
 
 @cli.command("explore")
-@click.option("--port", required=True, help="Nombre del puerto, por ejemplo COM3.")
-@click.option("--baud", default=9600, show_default=True, help="Baudios.")
-@click.option("--timeout", default=0.2, show_default=True, help="Timeout en segundos.")
+@serial_options
 @click.option("--slave", default=1, show_default=True, type=int, help="Direccion del esclavo.")
-def explore(port, baud, timeout, slave):
+def explore(port, config_path, profile, baud, timeout, slave):
     """Modo interactivo para explorar registros Modbus."""
+    port, baud, timeout = resolve_serial(port, baud, timeout, config_path, profile)
     click.echo("=== Modo Explorador Modbus RTU ===")
     click.echo("Escribe 'help' para ver comandos disponibles, 'quit' para salir.\n")
 

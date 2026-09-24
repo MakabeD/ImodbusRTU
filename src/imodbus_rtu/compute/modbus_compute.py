@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import serial
+
+logger = logging.getLogger(__name__)
 
 if not hasattr(serial, "PARITY_NONE"):
     serial_module = getattr(serial, "__file__", "desconocido")
@@ -65,7 +68,7 @@ def registers_compute(registers: bytes, count: int) -> list[int]:
     return decimal_registers
 
 
-def error_bit_validation(registers: bytes, quiet: bool = False) -> list[int] | None:
+def error_bit_validation(registers: bytes) -> list[int] | None:
     funcion_recibida = registers[1]
 
     if funcion_recibida >= 0x80:
@@ -77,7 +80,7 @@ def error_bit_validation(registers: bytes, quiet: bool = False) -> list[int] | N
             4: "04 Fallo interno del dispositivo",
         }
         mensaje = errores.get(codigo_error, f"Error desconocido: {codigo_error}")
-        print(f"\n Excepcion Modbus detectada: {mensaje}") if not quiet else None
+        logger.warning("Excepcion Modbus detectada: %s", mensaje)
         return []
 
     return None
@@ -156,22 +159,19 @@ class MasterModbusCompute:
                 bytesize=self.bytesize,
                 timeout=self.timeout,
             )
-            print(f"Puerto {self.port} conectado exitosamente.")
+            logger.info("Puerto %s conectado exitosamente.", self.port)
             return True
         except serial.SerialException as error:
-            print(f"Error critico: No se pudo abrir el puerto {self.port}.")
-            print(f"Detalle tecnico: {error}")
+            logger.error("No se pudo abrir el puerto %s: %s", self.port, error)
             self.serial = None
             return False
 
     def disconnect(self):
         if self.serial and self.serial.is_open:
             self.serial.close()
-            print(f"Puerto {self.port} cerrado y liberado de forma segura.")
+            logger.info("Puerto %s cerrado y liberado de forma segura.", self.port)
 
-    def read_holding_registers(
-        self, slave_id: int, address: int = 0, count: int = 1, quiet: bool = False
-    ):
+    def read_holding_registers(self, slave_id: int, address: int = 0, count: int = 1):
         if self.serial is None or not self.serial.is_open:
             return []
 
@@ -190,30 +190,32 @@ class MasterModbusCompute:
             self.serial.timeout = max(self.timeout, self._transmission_seconds(expected_length))
             holding_registers = self.serial.read(expected_length)
         except serial.SerialException as error:
-            print(f"Fallo de comunicacion con el esclavo {slave_id}: {error}")
+            logger.error("Fallo de comunicacion con el esclavo %s: %s", slave_id, error)
             return []
 
         if not holding_registers:
             return []
 
         if not validate_response_crc(holding_registers):
-            print(
-                f"Error de CRC al leer esclavo {slave_id}, direccion {address}. "
-                "La trama pudo llegar corrupta."
+            logger.warning(
+                "Error de CRC al leer esclavo %s, direccion %s. La trama pudo llegar corrupta.",
+                slave_id,
+                address,
             )
             return []
 
-        error_response = error_bit_validation(holding_registers, quiet)
+        error_response = error_bit_validation(holding_registers)
         if error_response == []:
             return []
 
         # A normal response must be exact; exception frames (5 bytes) were
         # already handled above. A short frame would silently parse as zeros.
         if len(holding_registers) != expected_length:
-            print(
-                f"Respuesta incompleta del esclavo {slave_id} "
-                f"({len(holding_registers)}/{expected_length} bytes). "
-                "La lectura se descarta."
+            logger.warning(
+                "Respuesta incompleta del esclavo %s (%s/%s bytes). La lectura se descarta.",
+                slave_id,
+                len(holding_registers),
+                expected_length,
             )
             return []
 
@@ -238,7 +240,6 @@ class MasterModbusCompute:
         slave_id: int,
         register_start: int,
         register_end: int,
-        quiet: bool = False,
         on_progress: Callable[[int, int], None] | None = None,
     ) -> list[RegisterValue]:
         """Read a contiguous register range using batched requests.
@@ -256,9 +257,7 @@ class MasterModbusCompute:
         while address <= register_end:
             chunk_end = min(address + MAX_REGISTERS_PER_READ - 1, register_end)
             count = chunk_end - address + 1
-            values = self.read_holding_registers(
-                slave_id=slave_id, address=address, count=count, quiet=quiet
-            )
+            values = self.read_holding_registers(slave_id=slave_id, address=address, count=count)
 
             if len(values) == count:
                 found.extend(
@@ -268,7 +267,7 @@ class MasterModbusCompute:
             else:
                 for register in range(address, chunk_end + 1):
                     single = self.read_holding_registers(
-                        slave_id=slave_id, address=register, count=1, quiet=quiet
+                        slave_id=slave_id, address=register, count=1
                     )
                     if single:
                         found.append(
