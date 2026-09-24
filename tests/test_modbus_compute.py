@@ -62,11 +62,11 @@ class TestRegistersCompute:
 class TestErrorBitValidation:
     def test_exception_response_returns_empty_list(self):
         response = bytes([0x01, 0x83, 0x02, 0x00, 0x00])
-        assert error_bit_validation(response, quiet=True) == []
+        assert error_bit_validation(response) == []
 
     def test_normal_response_returns_none(self):
         response = bytes([0x01, 0x03, 0x02, 0x00, 0x00])
-        assert error_bit_validation(response, quiet=True) is None
+        assert error_bit_validation(response) is None
 
 
 class TestFindVariableCandidates:

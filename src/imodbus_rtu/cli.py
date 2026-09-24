@@ -24,9 +24,13 @@ def setup_logging(verbose: bool, quiet: bool):
     if quiet:
         logging.disable(logging.CRITICAL)
     elif verbose:
-        logging.basicConfig(level=logging.DEBUG, format="%(message)s")
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(levelname)s:%(name)s: %(message)s",
+        )
     else:
-        logging.basicConfig(level=logging.WARNING, format="%(message)s")
+        # Library info messages (connect/disconnect) read like normal output.
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
 @click.group()
@@ -137,7 +141,6 @@ def analyze_registers(
             slave_id=slave_id,
             register_start=register_start,
             register_end=register_end,
-            quiet=show_progress,
             on_progress=on_progress if show_progress else None,
         )
         snapshot.extend(slave_registers)

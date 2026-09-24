@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import sqlite3
 import time
@@ -11,6 +12,8 @@ from pathlib import Path
 import pandas as pd
 
 from imodbus_rtu.compute.modbus_compute import MasterModbusCompute
+
+logger = logging.getLogger(__name__)
 
 RegisterReader = Callable[[int, int], int | None]
 
@@ -99,9 +102,10 @@ def build_run_dataframe(
                 sleep_fn(sample_every_seconds)
     except KeyboardInterrupt:
         # Persist whatever was collected so far instead of losing the run.
-        print(
-            "Monitoreo interrumpido por el usuario. "
-            f"Se conservan {len(rows)} de {sample_count} muestras."
+        logger.warning(
+            "Monitoreo interrumpido por el usuario. Se conservan %s de %s muestras.",
+            len(rows),
+            sample_count,
         )
 
     return pd.DataFrame(rows)
