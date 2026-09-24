@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=2.2",
     "pandas>=2.3",
     "pyserial>=3.5",
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
