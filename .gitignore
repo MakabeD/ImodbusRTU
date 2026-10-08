@@ -6,3 +6,5 @@
 /data/
 .opencode/
 .ruff_cache
+imodbus.toml
+!imodbus.example.toml

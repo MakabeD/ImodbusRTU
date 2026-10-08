@@ -53,7 +53,8 @@ imodbus list-ports
 
 `imodbus.toml` en el directorio de trabajo define ajustes serial reutilizables.
 Precedencia: flag del CLI > perfil > seccion `[serial]` > valores por defecto
-(baud `9600`, timeout `0.2`).
+(baud `9600`, timeout `0.2`). El archivo esta ignorado por git; parte del
+ejemplo versionado en [`imodbus.example.toml`](imodbus.example.toml):
 
 ```toml
 [serial]

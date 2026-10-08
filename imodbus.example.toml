@@ -1,0 +1,13 @@
+# Ejemplo de configuracion para ImodbusRTU.
+# Copialo como imodbus.toml en tu directorio de trabajo y ajusta los valores:
+#   cp imodbus.example.toml imodbus.toml
+# Precedencia: flag del CLI > perfil > seccion [serial] > valores por defecto
+# (baud 9600, timeout 0.2). Solo se aceptan las claves port, baud y timeout.
+
+[serial]
+port = "COM3"
+baud = 19200
+
+[profiles.lab]
+port = "COM4"
+timeout = 0.5
