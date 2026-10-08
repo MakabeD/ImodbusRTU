@@ -1,0 +1,11 @@
+# Copy this file to imodbus.toml and edit the ports for this machine:
+#   cp imodbus.example.toml imodbus.toml
+# imodbus.toml is gitignored. Valid keys are only port, baud and timeout.
+
+[serial]
+port = "COM3"
+baud = 19200
+
+[profiles.lab]
+port = "COM4"
+timeout = 0.5

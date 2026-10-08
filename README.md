@@ -55,6 +55,13 @@ imodbus list-ports
 Precedencia: flag del CLI > perfil > seccion `[serial]` > valores por defecto
 (baud `9600`, timeout `0.2`).
 
+Copia [`imodbus.example.toml`](imodbus.example.toml) y ajusta los puertos de
+esta maquina (`imodbus.toml` no se versiona):
+
+```bash
+cp imodbus.example.toml imodbus.toml
+```
+
 ```toml
 [serial]
 port = "COM3"

@@ -6,3 +6,7 @@
 /data/
 .opencode/
 .ruff_cache
+
+# Local serial settings (machine-specific ports). Keep the example tracked.
+imodbus.toml
+!imodbus.example.toml
