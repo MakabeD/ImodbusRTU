@@ -139,8 +139,10 @@ def render_registers(registers: list[RegisterValue], verbose: bool = False):
 
 
 def render_progress_bar(current: int, total: int, prefix: str = "", width: int = 30):
-    percent = current / total if total > 0 else 0
-    filled = int(width * percent)
+    width = max(width, 0)
+    current = min(max(current, 0), total) if total > 0 else 0
+    percent = current / total if total > 0 else 0.0
+    filled = min(max(int(width * percent), 0), width)
     bar = "█" * filled + "░" * (width - filled)
     click.echo(f"\r{prefix}[{bar}] {current}/{total} ({percent * 100:.0f}%)", nl=False)
     if current >= total:
@@ -173,19 +175,20 @@ def analyze_registers(
     show_progress: bool = False,
 ) -> list[RegisterValue]:
     snapshot: list[RegisterValue] = []
-    total_registers = (register_end - register_start + 1) * len(slave_ids)
-    current = 0
-
-    def on_progress(done: int, total: int):
-        nonlocal current
-        current += done
-        render_progress_bar(current, total_registers, prefix="Progreso: ")
+    registers_per_slave = max(register_end - register_start + 1, 0)
+    total_registers = registers_per_slave * len(slave_ids)
+    completed_before_slave = 0
 
     for slave_id in slave_ids:
         if show_progress:
             click.echo(
                 f"\n[Esclavo {slave_id}] Escaneando registros {register_start}-{register_end}..."
             )
+
+        progress_base = completed_before_slave
+
+        def on_progress(done: int, _total: int, base: int = progress_base) -> None:
+            render_progress_bar(base + done, total_registers, prefix="Progreso: ")
 
         slave_registers = client.read_register_block(
             slave_id=slave_id,
@@ -194,6 +197,7 @@ def analyze_registers(
             on_progress=on_progress if show_progress else None,
         )
         snapshot.extend(slave_registers)
+        completed_before_slave += registers_per_slave
         if show_progress:
             click.echo()
 
