@@ -224,11 +224,18 @@ class TestReadRegisterBlock:
             value.to_bytes(2, "big") for value in values[125:]
         )
         client = build_client(FakeSerial(responses=[make_response(body), make_response(body2)]))
-        found = client.read_register_block(1, 0, 129)
+        progress: list[tuple[int, int]] = []
+        found = client.read_register_block(
+            1,
+            0,
+            129,
+            on_progress=lambda done, total: progress.append((done, total)),
+        )
 
         assert [item.value for item in found] == values
         counts = [int.from_bytes(frame[4:6], "big") for frame in client.serial.written]
         assert counts == [125, 5]
+        assert progress == [(125, 130), (130, 130)]
 
     def test_progress_callback_reports_cumulative(self):
         payload = bytes([0x01, 0x03, 0x06, 0x00, 0x0A, 0x00, 0x14, 0x00, 0x1E])
