@@ -139,11 +139,22 @@ def render_registers(registers: list[RegisterValue], verbose: bool = False):
 
 
 def render_progress_bar(current: int, total: int, prefix: str = "", width: int = 30):
-    percent = current / total if total > 0 else 0
-    filled = int(width * percent)
+    """Render a single-line progress bar that never exceeds 100%.
+
+    Callers may pass a current above total (for example if a callback is
+    double-counted). The bar, count, and percentage are clamped so the line
+    cannot grow past `width` or report more than 100%.
+    """
+    if total > 0:
+        ratio = min(max(current / total, 0), 1)
+        shown = min(max(current, 0), total)
+    else:
+        ratio = 0
+        shown = current
+    filled = min(int(width * ratio), width)
     bar = "█" * filled + "░" * (width - filled)
-    click.echo(f"\r{prefix}[{bar}] {current}/{total} ({percent * 100:.0f}%)", nl=False)
-    if current >= total:
+    click.echo(f"\r{prefix}[{bar}] {shown}/{total} ({ratio * 100:.0f}%)", nl=False)
+    if total > 0 and current >= total:
         click.echo()
 
 
@@ -173,13 +184,15 @@ def analyze_registers(
     show_progress: bool = False,
 ) -> list[RegisterValue]:
     snapshot: list[RegisterValue] = []
-    total_registers = (register_end - register_start + 1) * len(slave_ids)
-    current = 0
+    slave_span = register_end - register_start + 1
+    total_registers = slave_span * len(slave_ids)
+    # read_register_block reports a cumulative count within the current slave,
+    # not a delta. Track completed slaves separately so multi-chunk ranges
+    # are not added twice.
+    completed = 0
 
     def on_progress(done: int, total: int):
-        nonlocal current
-        current += done
-        render_progress_bar(current, total_registers, prefix="Progreso: ")
+        render_progress_bar(completed + done, total_registers, prefix="Progreso: ")
 
     for slave_id in slave_ids:
         if show_progress:
@@ -194,6 +207,7 @@ def analyze_registers(
             on_progress=on_progress if show_progress else None,
         )
         snapshot.extend(slave_registers)
+        completed += slave_span
         if show_progress:
             click.echo()
 

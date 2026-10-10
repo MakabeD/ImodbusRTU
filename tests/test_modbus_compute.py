@@ -239,6 +239,22 @@ class TestReadRegisterBlock:
         )
         assert calls == [(3, 3)]
 
+    def test_progress_callback_is_cumulative_across_chunks(self):
+        # 0-129 is 130 registers: one 125-register frame plus a 5-register tail.
+        values = [i + 1 for i in range(130)]
+        body = bytes([0x01, 0x03, 0xFA]) + b"".join(
+            value.to_bytes(2, "big") for value in values[:125]
+        )
+        body2 = bytes([0x01, 0x03, 0x0A]) + b"".join(
+            value.to_bytes(2, "big") for value in values[125:]
+        )
+        client = build_client(FakeSerial(responses=[make_response(body), make_response(body2)]))
+        calls: list[tuple[int, int]] = []
+        client.read_register_block(
+            1, 0, 129, on_progress=lambda done, total: calls.append((done, total))
+        )
+        assert calls == [(125, 130), (130, 130)]
+
     def test_read_timeout_scales_with_frame_size(self):
         client = build_client(FakeSerial(responses=[b""]))
         client.read_holding_registers(slave_id=1, address=0, count=1)
